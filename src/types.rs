@@ -19,7 +19,19 @@ impl Error for InvariantError {
     }
 }
 
+pub trait Verifier {
+    fn verify(&self) -> Vec<VerificationResult>;
+}
+
+pub enum ClusterType {
+    Osd,
+    Rosa,
+    Hypershift,
+}
+
 pub struct MinimalClusterInfo {
+    pub cluster_id: String,
+    pub cluster_type: ClusterType,
     pub cloud_provider: String,
     pub subnets: Vec<String>,
 }
@@ -51,7 +63,11 @@ impl MinimalClusterInfo {
                     .to_string()
             })
             .collect();
+        let cluster_type = MinimalClusterInfo::cluster_type(&cluster_json)
+            .expect("Could not determine product - only OSD, Rosa and Hypershift are supported.");
         MinimalClusterInfo {
+            cluster_id: clusterid.to_string(),
+            cluster_type,
             cloud_provider: cluster_json["cloud_provider"]["id"]
                 .as_str()
                 .unwrap()
@@ -59,44 +75,63 @@ impl MinimalClusterInfo {
             subnets,
         }
     }
+
+    fn cluster_type(cluster_json: &serde_json::Value) -> Option<ClusterType> {
+        if let Some(hypershift) = cluster_json
+            .get("hypershift")
+            .and_then(|v| v.get("enabled"))
+        {
+            if hypershift == true {
+                return Some(ClusterType::Hypershift);
+            }
+        } else if let Some(product) = cluster_json.get("product").and_then(|v| v.get("id")) {
+            if product == "OSD" {
+                return Some(ClusterType::Osd);
+            } else if product == "Rosa" {
+                return Some(ClusterType::Rosa);
+            }
+        }
+        return None;
+    }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum VerificationResult {
     Success(String),
-    TooManySubnetsPerAZ(Vec<(String, u8)>),
-    MissingClusterTag(String),
-    IncorrectClusterTag(String, String),
-    MissingPrivateElbTag(String),
-    MissingPublicElbTag(String),
+    SubnetTooManyPerAZ(Vec<(String, u8)>),
+    SubnetMissingClusterTag(String),
+    SubnetIncorrectClusterTag(String, String),
+    SubnetMissingPrivateElbTag(String),
+    SubnetMissingPublicElbTag(String),
 }
 
 impl Display for VerificationResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             VerificationResult::Success(msg) => f.write_str(&msg.green().to_string()),
-            VerificationResult::TooManySubnetsPerAZ(azs) => {
+            VerificationResult::SubnetTooManyPerAZ(azs) => {
                 let results = azs.iter().map(|a| {
                     let msg = format!("Subnet {} has too many subnets: {}", a.0, a.1).red();
                     f.write_str(&msg)
                 });
                 results.collect()
             }
-            VerificationResult::MissingClusterTag(subnet) => f.write_str(&format!(
+            VerificationResult::SubnetMissingClusterTag(subnet) => f.write_str(&format!(
                 "Subnet {} is {}",
                 subnet.red(),
                 "missing a cluster tag".red()
             )),
-            VerificationResult::IncorrectClusterTag(subnet, tag) => f.write_str(&format!(
+            VerificationResult::SubnetIncorrectClusterTag(subnet, tag) => f.write_str(&format!(
                 "Subnet {} has a non-shared cluster tag of a different cluster: {}",
                 subnet.red(),
                 tag.red()
             )),
-            VerificationResult::MissingPrivateElbTag(subnet) => f.write_str(&format!(
+            VerificationResult::SubnetMissingPrivateElbTag(subnet) => f.write_str(&format!(
                 "Subnet {} is missing private-elb tag: {}",
                 subnet.red(),
                 crate::vpc::PRIVATE_ELB_TAG.red()
             )),
-            VerificationResult::MissingPublicElbTag(subnet) => f.write_str(&format!(
+            VerificationResult::SubnetMissingPublicElbTag(subnet) => f.write_str(&format!(
                 "Subnet {} is missing public-elb tag: {}",
                 subnet.red(),
                 crate::vpc::PUBLIC_ELB_TAG.red()

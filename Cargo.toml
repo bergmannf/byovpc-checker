@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 aws-config = "1.1.8"
 aws-sdk-ec2 = "1.26.0"
+aws-sdk-elasticloadbalancingv2 = "1.19.0"
 clap = { version = "4.5.3", features = ["derive"] }
 clap-verbosity-flag = "2.2.0"
 colored = "2.1.0"

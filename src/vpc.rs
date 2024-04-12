@@ -1,4 +1,4 @@
-use crate::types::VerificationResult;
+use crate::types::{VerificationResult, Verifier};
 use log::{debug, info};
 
 use std::collections::HashMap;
@@ -7,19 +7,21 @@ pub const PRIVATE_ELB_TAG: &str = "kubernetes.io/role/internal-elb";
 pub const PUBLIC_ELB_TAG: &str = "kubernetes.io/role/elb";
 pub const CLUSTER_TAG: &str = "kubernetes.io/cluster/";
 
-pub struct ClusterNetwork {
+pub struct ClusterNetwork<'a> {
+    clusterid: &'a str,
     configured_subnets: Vec<aws_sdk_ec2::types::Subnet>,
     all_subnets: Vec<aws_sdk_ec2::types::Subnet>,
     routetables: Vec<aws_sdk_ec2::types::RouteTable>,
     subnet_routetable_mapping: HashMap<String, aws_sdk_ec2::types::RouteTable>,
 }
 
-impl ClusterNetwork {
+impl<'a> ClusterNetwork<'a> {
     pub fn new(
+        clusterid: &'a str,
         configured_subnets: Vec<aws_sdk_ec2::types::Subnet>,
         all_subnets: Vec<aws_sdk_ec2::types::Subnet>,
         routetables: Vec<aws_sdk_ec2::types::RouteTable>,
-    ) -> ClusterNetwork {
+    ) -> ClusterNetwork<'a> {
         let mut subnet_to_routetables: HashMap<String, aws_sdk_ec2::types::RouteTable> =
             HashMap::new();
         for subnet in all_subnets.iter() {
@@ -37,6 +39,7 @@ impl ClusterNetwork {
             }
         }
         ClusterNetwork {
+            clusterid,
             configured_subnets,
             all_subnets,
             routetables,
@@ -107,11 +110,11 @@ impl ClusterNetwork {
         if problematic_azs.len() == 0 {
             VerificationResult::Success("All AZs have the expected number of subnets".to_string())
         } else {
-            VerificationResult::TooManySubnetsPerAZ(problematic_azs)
+            VerificationResult::SubnetTooManyPerAZ(problematic_azs)
         }
     }
 
-    pub fn verify_subnet_tags(&self, clusterid: &String) -> Vec<VerificationResult> {
+    pub fn verify_subnet_tags(&self) -> Vec<VerificationResult> {
         info!("Checking tags per subnet");
         let mut verification_results = Vec::new();
         for subnet in self.all_subnets.iter() {
@@ -126,7 +129,7 @@ impl ClusterNetwork {
                 if let (Some(key), Some(value)) = (tag.key.clone(), tag.value.clone()) {
                     if key.contains(&CLUSTER_TAG) {
                         missing_cluster_tag = false;
-                        if !key.contains(clusterid) && value == "owned" {
+                        if !key.contains(&self.clusterid) && value == "owned" {
                             incorrect_cluster_tag = key.clone();
                         }
                     }
@@ -150,21 +153,25 @@ impl ClusterNetwork {
             }
             let has_incorrect_cluster_tag = incorrect_cluster_tag.len() > 0;
             if missing_cluster_tag {
-                verification_results.push(VerificationResult::MissingClusterTag(subnet_id.clone()));
+                verification_results.push(VerificationResult::SubnetMissingClusterTag(
+                    subnet_id.clone(),
+                ));
             }
             if has_incorrect_cluster_tag {
-                verification_results.push(VerificationResult::IncorrectClusterTag(
+                verification_results.push(VerificationResult::SubnetIncorrectClusterTag(
                     subnet_id.clone(),
                     incorrect_cluster_tag,
                 ));
             }
             if missing_private_elb_tag {
-                verification_results
-                    .push(VerificationResult::MissingPrivateElbTag(subnet_id.clone()));
+                verification_results.push(VerificationResult::SubnetMissingPrivateElbTag(
+                    subnet_id.clone(),
+                ));
             }
             if missing_public_elb_tag {
-                verification_results
-                    .push(VerificationResult::MissingPublicElbTag(subnet_id.clone()));
+                verification_results.push(VerificationResult::SubnetMissingPublicElbTag(
+                    subnet_id.clone(),
+                ));
             }
             if !missing_cluster_tag
                 && !has_incorrect_cluster_tag
@@ -178,5 +185,55 @@ impl ClusterNetwork {
             }
         }
         verification_results
+    }
+}
+
+impl<'a> Verifier for ClusterNetwork<'a> {
+    fn verify(&self) -> Vec<VerificationResult> {
+        let number_result = self.verify_number_of_subnets();
+        let mut tag_results = self.verify_subnet_tags();
+        tag_results.push(number_result);
+        tag_results
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_verify_number_of_subnets_success() {
+        let subnet = aws_sdk_ec2::types::Subnet::builder()
+            .availability_zone("us-east-1a")
+            .build();
+        let cn = ClusterNetwork::new("1", vec![subnet.clone()], vec![subnet.clone()], vec![]);
+        let result = cn.verify_number_of_subnets();
+        assert_eq!(
+            result,
+            VerificationResult::Success("All AZs have the expected number of subnets".to_string())
+        )
+    }
+
+    #[test]
+    fn test_verify_number_of_subnets_fail() {
+        let mut subnets = vec![];
+        for _ in 1..=3 {
+            subnets.push(
+                aws_sdk_ec2::types::Subnet::builder()
+                    .availability_zone("us-east-1a")
+                    .build(),
+            );
+        }
+        let cn = ClusterNetwork::new("1", subnets.clone(), subnets.clone(), vec![]);
+        let result = cn.verify_number_of_subnets();
+        assert_eq!(
+            result,
+            VerificationResult::SubnetTooManyPerAZ(vec![("us-east-1a".to_string(), 3)])
+        )
+    }
+
+    #[test]
+    fn test_verify_tags() {
+        let _tag = aws_sdk_ec2::types::Tag::builder().key("").value("").build();
     }
 }
