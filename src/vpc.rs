@@ -199,7 +199,68 @@ impl<'a> Verifier for ClusterNetwork<'a> {
 
 #[cfg(test)]
 mod tests {
+    use crate::aws::CLUSTER_TAG_PREFIX;
+
     use super::*;
+
+    fn make_subnet(
+        subnet_id: &str,
+        az: &str,
+        tags: &HashMap<&str, &str>,
+    ) -> aws_sdk_ec2::types::Subnet {
+        let tags = tags
+            .iter()
+            .map(|(k, v)| {
+                aws_sdk_ec2::types::Tag::builder()
+                    .key(k.to_string())
+                    .value(v.to_string())
+                    .build()
+            })
+            .collect();
+        aws_sdk_ec2::types::Subnet::builder()
+            .subnet_id(subnet_id)
+            .availability_zone(az)
+            .set_tags(Some(tags))
+            .build()
+    }
+
+    fn make_private_subnet(
+        subnet_id: &str,
+        az: &str,
+        tags: &HashMap<&str, &str>,
+    ) -> (aws_sdk_ec2::types::Subnet, aws_sdk_ec2::types::RouteTable) {
+        let private_subnet = make_subnet(subnet_id, az, tags);
+        let private_rtb = aws_sdk_ec2::types::RouteTable::builder()
+            .associations(
+                aws_sdk_ec2::types::RouteTableAssociation::builder()
+                    .subnet_id(subnet_id)
+                    .build(),
+            )
+            .build();
+        (private_subnet, private_rtb)
+    }
+
+    fn make_public_subnet(
+        subnet_id: &str,
+        az: &str,
+        tags: &HashMap<&str, &str>,
+    ) -> (aws_sdk_ec2::types::Subnet, aws_sdk_ec2::types::RouteTable) {
+        let public_subnet = make_subnet(subnet_id, az, tags);
+        let public_rtb = aws_sdk_ec2::types::RouteTable::builder()
+            .associations(
+                aws_sdk_ec2::types::RouteTableAssociation::builder()
+                    .subnet_id(subnet_id)
+                    .build(),
+            )
+            .routes(
+                aws_sdk_ec2::types::Route::builder()
+                    .destination_cidr_block("0.0.0.0/0")
+                    .set_gateway_id(Some("1".to_string()))
+                    .build(),
+            )
+            .build();
+        (public_subnet, public_rtb)
+    }
 
     #[test]
     fn test_verify_number_of_subnets_success() {
@@ -234,38 +295,9 @@ mod tests {
 
     #[test]
     fn test_verify_tags_missing_cluster_tag() {
-        let az = "us-east-1a";
         let clusterid = "1";
-        // let private_elb_tag = aws_sdk_ec2::types::Tag::builder()
-        //     .key(PRIVATE_ELB_TAG)
-        //     .value("1")
-        //     .build();
-        // let cluster_tag = aws_sdk_ec2::types::Tag::builder()
-        //     .key(format!("{}{}", CLUSTER_TAG, clusterid))
-        //     .value("owned")
-        //     .build();
-        let public_elb_tag = aws_sdk_ec2::types::Tag::builder()
-            .key(PUBLIC_ELB_TAG)
-            .value("1")
-            .build();
-        let public_subnet = aws_sdk_ec2::types::Subnet::builder()
-            .subnet_id("1")
-            .availability_zone(az)
-            .tags(public_elb_tag)
-            .build();
-        let public_rtb = aws_sdk_ec2::types::RouteTable::builder()
-            .associations(
-                aws_sdk_ec2::types::RouteTableAssociation::builder()
-                    .subnet_id("1")
-                    .build(),
-            )
-            .routes(
-                aws_sdk_ec2::types::Route::builder()
-                    .destination_cidr_block("0.0.0.0/0")
-                    .set_gateway_id(Some("1".to_string()))
-                    .build(),
-            )
-            .build();
+        let (public_subnet, public_rtb) =
+            make_public_subnet("1", "us-east-1a", &HashMap::from([(PUBLIC_ELB_TAG, "1")]));
         let cn = ClusterNetwork::new(
             clusterid,
             vec![public_subnet.clone()],
@@ -276,6 +308,33 @@ mod tests {
         assert_eq!(
             results[0],
             VerificationResult::SubnetMissingClusterTag("1".to_string())
+        )
+    }
+
+    #[test]
+    fn test_verify_tags_incorrect_cluster_tag() {
+        let clusterid = "1";
+        let (public_subnet, public_rtb) = make_public_subnet(
+            "1",
+            "us-east-1a",
+            &HashMap::from([
+                (PUBLIC_ELB_TAG, "1"),
+                (&format!("{}{}", CLUSTER_TAG_PREFIX, "2"), "owned"),
+            ]),
+        );
+        let cn = ClusterNetwork::new(
+            clusterid,
+            vec![public_subnet.clone()],
+            vec![public_subnet.clone()],
+            vec![public_rtb.clone()],
+        );
+        let results = cn.verify_subnet_tags();
+        assert_eq!(
+            results[0],
+            VerificationResult::SubnetIncorrectClusterTag(
+                public_subnet.subnet_id.unwrap(),
+                "kubernetes.io/cluster/2".to_string()
+            )
         )
     }
 }
