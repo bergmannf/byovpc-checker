@@ -126,7 +126,7 @@ impl<'a> ClusterNetwork<'a> {
             let tags = subnet.tags();
             debug!("Checking subnet: {}", subnet_id);
             for tag in tags {
-                if let (Some(key), Some(value)) = (tag.key.clone(), tag.value.clone()) {
+                if let (Some(key), Some(value)) = (&tag.key, &tag.value) {
                     if key.contains(&CLUSTER_TAG) {
                         missing_cluster_tag = false;
                         if !key.contains(&self.clusterid) && value == "owned" {
@@ -233,7 +233,49 @@ mod tests {
     }
 
     #[test]
-    fn test_verify_tags() {
-        let _tag = aws_sdk_ec2::types::Tag::builder().key("").value("").build();
+    fn test_verify_tags_missing_cluster_tag() {
+        let az = "us-east-1a";
+        let clusterid = "1";
+        // let private_elb_tag = aws_sdk_ec2::types::Tag::builder()
+        //     .key(PRIVATE_ELB_TAG)
+        //     .value("1")
+        //     .build();
+        // let cluster_tag = aws_sdk_ec2::types::Tag::builder()
+        //     .key(format!("{}{}", CLUSTER_TAG, clusterid))
+        //     .value("owned")
+        //     .build();
+        let public_elb_tag = aws_sdk_ec2::types::Tag::builder()
+            .key(PUBLIC_ELB_TAG)
+            .value("1")
+            .build();
+        let public_subnet = aws_sdk_ec2::types::Subnet::builder()
+            .subnet_id("1")
+            .availability_zone(az)
+            .tags(public_elb_tag)
+            .build();
+        let public_rtb = aws_sdk_ec2::types::RouteTable::builder()
+            .associations(
+                aws_sdk_ec2::types::RouteTableAssociation::builder()
+                    .subnet_id("1")
+                    .build(),
+            )
+            .routes(
+                aws_sdk_ec2::types::Route::builder()
+                    .destination_cidr_block("0.0.0.0/0")
+                    .set_gateway_id(Some("1".to_string()))
+                    .build(),
+            )
+            .build();
+        let cn = ClusterNetwork::new(
+            clusterid,
+            vec![public_subnet.clone()],
+            vec![public_subnet.clone()],
+            vec![public_rtb.clone()],
+        );
+        let results = cn.verify_subnet_tags();
+        assert_eq!(
+            results[0],
+            VerificationResult::SubnetMissingClusterTag("1".to_string())
+        )
     }
 }
