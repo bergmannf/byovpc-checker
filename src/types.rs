@@ -137,7 +137,8 @@ impl Display for VerificationResult {
             VerificationResult::SubnetTooManyPerAZ(azs) => {
                 let results = azs.iter().map(|a| {
                     let msg = format!(
-                        "AZ {} has {}: {}",
+                        "{} AZ {} has {}: {}",
+                        "".red(),
                         a.0.blue(),
                         "too many subnets".red(),
                         a.1
@@ -147,30 +148,35 @@ impl Display for VerificationResult {
                 results.collect()
             }
             VerificationResult::SubnetMissingClusterTag(subnet) => f.write_str(&format!(
-                "Subnet {} is {}",
+                "{} Subnet {} is {}",
+                "".yellow(),
                 subnet.blue(),
                 "missing a cluster tag".red()
             )),
             VerificationResult::SubnetIncorrectClusterTag(subnet, tag) => f.write_str(&format!(
-                "Subnet {} has a non-shared cluster tag of a different cluster: {}",
+                "{} Subnet {} has a non-shared cluster tag of a different cluster: {}",
+                "".yellow(),
                 subnet.blue(),
                 tag.red()
             )),
             VerificationResult::SubnetMissingPrivateElbTag(subnet) => f.write_str(&format!(
-                "Subnet {} is {}: {}",
+                "{} Subnet {} is {}: {}",
+                "".yellow(),
                 subnet.blue(),
-                "missing private-elb tag".red(),
-                crate::checks::network::PRIVATE_ELB_TAG.red()
+                "missing private-elb tag".yellow(),
+                crate::checks::network::PRIVATE_ELB_TAG.yellow()
             )),
             VerificationResult::SubnetMissingPublicElbTag(subnet) => f.write_str(&format!(
-                "Subnet {} is {}: {}",
+                "{} Subnet {} is {}: {}",
+                "".yellow(),
                 subnet.blue(),
-                "missing public-elb tag".red(),
-                crate::checks::network::PUBLIC_ELB_TAG.red()
+                "missing public-elb tag".yellow(),
+                crate::checks::network::PUBLIC_ELB_TAG.yellow()
             )),
             VerificationResult::LoadBalancerIncorrectSubnet(lb, az, subnet) => {
                 f.write_str(&format!(
-                    "LoadBalancer {} is {} in AZ {}",
+                    "{} LoadBalancer {} is {} in AZ {}",
+                    "".yellow(),
                     lb.blue(),
                     format!(
                         "using a subnet ({}) not configured for this cluster",
