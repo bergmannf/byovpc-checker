@@ -1,7 +1,10 @@
+//! Shared types that are used throughout the application.
+
 use colored::Colorize;
 use log::debug;
 use std::{error::Error, fmt::Display, process::Command};
 
+/// Indicates an expected property did not hold - should indicate a failure.
 #[derive(Debug)]
 pub struct InvariantError {
     pub msg: String,
@@ -19,10 +22,13 @@ impl Error for InvariantError {
     }
 }
 
+/// Trait to wrap running the checks to be performed. Every check should return
+/// a number of VerificationResults that can be printed.
 pub trait Verifier {
     fn verify(&self) -> Vec<VerificationResult>;
 }
 
+#[derive(Debug, Eq, PartialEq)]
 pub enum ClusterType {
     Osd,
     Rosa,
@@ -31,6 +37,7 @@ pub enum ClusterType {
 
 pub struct MinimalClusterInfo {
     pub cluster_id: String,
+    pub cluster_infra_name: String,
     pub cluster_type: ClusterType,
     pub cloud_provider: String,
     pub subnets: Vec<String>,
@@ -63,10 +70,21 @@ impl MinimalClusterInfo {
                     .to_string()
             })
             .collect();
-        let cluster_type = MinimalClusterInfo::cluster_type(&cluster_json)
-            .expect("Could not determine product - only OSD, Rosa and Hypershift are supported.");
+        let cluster_type = MinimalClusterInfo::cluster_type(&cluster_json).expect(
+            "Could not determine product - only OSD (on AWS), Rosa and Hypershift are supported.",
+        );
+        debug!("Product is: {:?}", cluster_type);
+        let cluster_infra_name = match cluster_type {
+            ClusterType::Hypershift => cluster_json.get("id").unwrap().as_str().unwrap(),
+            _ => cluster_json
+                .get("infra_id")
+                .expect("did not find a infra id for the cluster")
+                .as_str()
+                .unwrap(),
+        };
         MinimalClusterInfo {
             cluster_id: clusterid.to_string(),
+            cluster_infra_name: cluster_infra_name.to_string(),
             cluster_type,
             cloud_provider: cluster_json["cloud_provider"]["id"]
                 .as_str()
@@ -77,17 +95,21 @@ impl MinimalClusterInfo {
     }
 
     fn cluster_type(cluster_json: &serde_json::Value) -> Option<ClusterType> {
+        debug!("Checking cluster type");
         if let Some(hypershift) = cluster_json
             .get("hypershift")
             .and_then(|v| v.get("enabled"))
         {
+            debug!("Checking hypershift: {}", hypershift);
             if hypershift == true {
                 return Some(ClusterType::Hypershift);
             }
-        } else if let Some(product) = cluster_json.get("product").and_then(|v| v.get("id")) {
+        }
+        if let Some(product) = cluster_json.get("product").and_then(|v| v.get("id")) {
+            debug!("Checking OSD|Rosa: {}", product);
             if product == "OSD" {
                 return Some(ClusterType::Osd);
-            } else if product == "Rosa" {
+            } else if product == "rosa" {
                 return Some(ClusterType::Rosa);
             }
         }
@@ -95,6 +117,8 @@ impl MinimalClusterInfo {
     }
 }
 
+/// VerificationResult list all error conditions that can occur. These should be
+/// detailed enough to allow the user to fix the problem.
 #[derive(Debug, PartialEq, Eq)]
 pub enum VerificationResult {
     Success(String),
@@ -103,6 +127,7 @@ pub enum VerificationResult {
     SubnetIncorrectClusterTag(String, String),
     SubnetMissingPrivateElbTag(String),
     SubnetMissingPublicElbTag(String),
+    LoadBalancerIncorrectSubnet(String, String, String),
 }
 
 impl Display for VerificationResult {
@@ -111,31 +136,50 @@ impl Display for VerificationResult {
             VerificationResult::Success(msg) => f.write_str(&msg.green().to_string()),
             VerificationResult::SubnetTooManyPerAZ(azs) => {
                 let results = azs.iter().map(|a| {
-                    let msg = format!("Subnet {} has too many subnets: {}", a.0, a.1).red();
+                    let msg = format!(
+                        "AZ {} has {}: {}",
+                        a.0.blue(),
+                        "too many subnets".red(),
+                        a.1
+                    );
                     f.write_str(&msg)
                 });
                 results.collect()
             }
             VerificationResult::SubnetMissingClusterTag(subnet) => f.write_str(&format!(
                 "Subnet {} is {}",
-                subnet.red(),
+                subnet.blue(),
                 "missing a cluster tag".red()
             )),
             VerificationResult::SubnetIncorrectClusterTag(subnet, tag) => f.write_str(&format!(
                 "Subnet {} has a non-shared cluster tag of a different cluster: {}",
-                subnet.red(),
+                subnet.blue(),
                 tag.red()
             )),
             VerificationResult::SubnetMissingPrivateElbTag(subnet) => f.write_str(&format!(
-                "Subnet {} is missing private-elb tag: {}",
-                subnet.red(),
-                crate::vpc::PRIVATE_ELB_TAG.red()
+                "Subnet {} is {}: {}",
+                subnet.blue(),
+                "missing private-elb tag".red(),
+                crate::checks::network::PRIVATE_ELB_TAG.red()
             )),
             VerificationResult::SubnetMissingPublicElbTag(subnet) => f.write_str(&format!(
-                "Subnet {} is missing public-elb tag: {}",
-                subnet.red(),
-                crate::vpc::PUBLIC_ELB_TAG.red()
+                "Subnet {} is {}: {}",
+                subnet.blue(),
+                "missing public-elb tag".red(),
+                crate::checks::network::PUBLIC_ELB_TAG.red()
             )),
+            VerificationResult::LoadBalancerIncorrectSubnet(lb, az, subnet) => {
+                f.write_str(&format!(
+                    "LoadBalancer {} is {} in AZ {}",
+                    lb.blue(),
+                    format!(
+                        "using a subnet ({}) not configured for this cluster",
+                        subnet
+                    )
+                    .red(),
+                    az.blue()
+                ))
+            }
         }
     }
 }

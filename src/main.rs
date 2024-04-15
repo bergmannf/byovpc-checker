@@ -1,9 +1,15 @@
+//! This program provides a quick way to check the setup of AWS and detect
+//! possible problems when attempting to run Openshift clusters. It focuses on
+//! bring-your-own-VPC checks - meaning the networking setup was performed by
+//! the user, not the installer.
+
 mod aws;
+mod checks;
 mod types;
 mod vpc;
 
 use types::MinimalClusterInfo;
-use vpc::ClusterNetwork;
+use checks::network::ClusterNetwork;
 use std::process::exit;
 
 use aws_sdk_ec2::{Client as EC2Client, Error};
@@ -46,18 +52,22 @@ async fn main() -> Result<(), Error> {
     let ec2_client = EC2Client::new(&aws_config);
     let elbv2_client = ELBv2Client::new(&aws_config);
     let lbs = crate::aws::get_load_balancers(&elbv2_client, &cluster_info).await.expect("could not retrieve load balancers");
-    println!("Found load-balancers for cluster: {:?}", lbs);
+    let lb_enis = crate::aws::get_load_balancer_enis(&ec2_client, &lbs).await.expect("could not find ENIs for loadbalancers");
     let aws_subnets = crate::aws::get_subnets(&ec2_client, &cluster_info.subnets).await;
-    let configured_subnets = aws_subnets.as_ref().unwrap().subnets.as_ref().unwrap().clone();
-    let all_subnets = crate::aws::get_all_subnets(&ec2_client, &aws_subnets.unwrap().subnets.unwrap()).await.expect("did not get subnets from vpc");
+    let configured_subnets = aws_subnets.as_ref().unwrap().clone();
+    let all_subnets = crate::aws::get_all_subnets(&ec2_client, &aws_subnets.unwrap()).await.expect("did not get subnets from vpc");
     let subnet_ids = all_subnets.iter().map(|s| s.subnet_id.as_ref().unwrap().clone()).collect();
     let aws_routetables = crate::aws::get_route_tables(&ec2_client, &subnet_ids).await;
 
-    let css = ClusterNetwork::new(&options.clusterid,
-                                  configured_subnets,
-                                  all_subnets,
-                                  aws_routetables.unwrap().route_tables.unwrap().to_vec());
-    for res in css.verify() {
+    let cn = ClusterNetwork::new(
+        &options.clusterid,
+        configured_subnets,
+        all_subnets,
+        aws_routetables.unwrap(),
+        lbs,
+        lb_enis
+    );
+    for res in cn.verify() {
         println!("{}", res);
     }
     Ok(())
