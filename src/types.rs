@@ -133,7 +133,9 @@ pub enum VerificationResult {
 impl Display for VerificationResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            VerificationResult::Success(msg) => f.write_str(&msg.green().to_string()),
+            VerificationResult::Success(msg) => {
+                f.write_str(&format!("{} {}", "".green(), msg.green()))
+            }
             VerificationResult::SubnetTooManyPerAZ(azs) => {
                 let results = azs.iter().map(|a| {
                     let msg = format!(
