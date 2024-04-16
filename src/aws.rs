@@ -64,8 +64,16 @@ impl<'a> Collector for DefaultCollector<'a> {
 
 /// Returns `ProxyConnector<HttpConnector>` if env. variable 'https_proxy' is set
 pub fn determine_proxy() -> Option<ProxyConnector<HttpConnector>> {
-    let proxy_url: Url = std::env::var("HTTPS_PROXY").ok()?.parse().ok()?;
-    let mut proxy_uri: Uri = std::env::var("HTTPS_PROXY").ok()?.parse().ok()?;
+    let proxy_url: Url = std::env::var("HTTPS_PROXY")
+        .or_else(|_v| std::env::var("https_proxy"))
+        .ok()?
+        .parse()
+        .ok()?;
+    let mut proxy_uri: Uri = std::env::var("HTTPS_PROXY")
+        .or_else(|_v| std::env::var("https_proxy"))
+        .ok()?
+        .parse()
+        .ok()?;
     if proxy_uri.scheme().is_none() {
         error!("Configured proxy did not specify a scheme - falling back to HTTP.");
         proxy_uri = format!("http://{}", std::env::var("HTTPS_PROXY").ok()?)
