@@ -1,7 +1,7 @@
 //! Shared types that are used throughout the application.
 
 use colored::Colorize;
-use log::debug;
+use log::{debug, warn};
 use std::{error::Error, fmt::Display, process::Command};
 
 /// Indicates an expected property did not hold - should indicate a failure.
@@ -59,17 +59,22 @@ impl MinimalClusterInfo {
 
     pub fn get_cluster_info(clusterid: &String) -> Self {
         let cluster_json = MinimalClusterInfo::get_cluster_json(clusterid);
-        let x = cluster_json["aws"]["subnet_ids"]
-            .as_array()
-            .expect("Subnets must be an array - is this not a BYOVPC cluster?");
-        let subnets: Vec<String> = x
-            .iter()
-            .map(|v| {
-                v.as_str()
-                    .expect("converting subnet to str failed")
-                    .to_string()
-            })
-            .collect();
+        let sxs = cluster_json
+            .get("aws")
+            .and_then(|v| v.get("subnet_ids"))
+            .and_then(|v| v.as_array());
+        let subnets: Vec<String> = if let Some(sx) = sxs {
+            sx.iter()
+                .map(|v| {
+                    v.as_str()
+                        .expect("converting subnet to str failed")
+                        .to_string()
+                })
+                .collect()
+        } else {
+            warn!("No subnet ids configured - this will make some checks relying on this useless.");
+            vec![]
+        };
         let cluster_type = MinimalClusterInfo::cluster_type(&cluster_json).expect(
             "Could not determine product - only OSD (on AWS), Rosa and Hypershift are supported.",
         );
