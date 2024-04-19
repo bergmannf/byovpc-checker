@@ -197,7 +197,7 @@ pub async fn get_load_balancers(
 ) -> Result<Vec<LoadBalancer>, aws_sdk_elasticloadbalancingv2::Error> {
     debug!("Retrieving LoadBalancers");
     let mut lb_arns = HashMap::new();
-    let collector: Box<dyn Collector> = match cluster_info.cluster_type {
+    let collector: Box<dyn Collector + Send> = match cluster_info.cluster_type {
         crate::types::ClusterType::Hypershift => {
             debug!("Using hypershift collector");
             Box::new(HypershiftCollector {})
