@@ -28,13 +28,14 @@ pub trait Verifier {
     fn verify(&self) -> Vec<VerificationResult>;
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ClusterType {
     Osd,
     Rosa,
     Hypershift,
 }
 
+#[derive(Clone)]
 pub struct MinimalClusterInfo {
     pub cluster_id: String,
     pub cluster_infra_name: String,

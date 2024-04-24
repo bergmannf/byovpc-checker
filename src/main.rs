@@ -55,39 +55,51 @@ async fn main() -> Result<(), Error> {
 
     let ec2_client = EC2Client::new(&aws_config);
     let elbv2_client = ELBv2Client::new(&aws_config);
-    let lbs;
 
+    info!("Fetching LoadBalancer data");
     let h1 = tokio::spawn({
-        info!("Fetching load balancers");
-        lbs = crate::aws::get_load_balancers(&elbv2_client, &cluster_info)
-            .await
-            .expect("LBs");
+        let cluster_info = cluster_info.clone();
         let ec2_client = ec2_client.clone();
-        let lbs = lbs.clone();
-        async move { crate::aws::get_load_balancer_enis(&ec2_client, &lbs).await }
+        async move {
+            info!("Fetching load balancers");
+            let lbs = crate::aws::get_load_balancers(&elbv2_client, &cluster_info)
+                .await
+                .expect("could not retrieve load balancers");
+            let ec2_client = ec2_client.clone();
+            let lbs = lbs.clone();
+            let eni_lbs = crate::aws::get_load_balancer_enis(&ec2_client, &lbs)
+                .await
+                .expect("could not retrieve ENIs");
+            (lbs, eni_lbs)
+        }
     });
 
     info!("Fetching configured subnets");
-    let aws_subnets;
-    let all_subnets;
-    let configured_subnets;
     let h2 = tokio::spawn({
-        aws_subnets = crate::aws::get_subnets(&ec2_client, &cluster_info.subnets).await;
-        configured_subnets = aws_subnets.as_ref().unwrap().clone();
-        all_subnets = crate::aws::get_all_subnets(&ec2_client, &aws_subnets.unwrap())
-            .await
-            .expect("did not get subnets from vpc");
-        let subnet_ids = all_subnets
-            .iter()
-            .map(|s| s.subnet_id.as_ref().unwrap().clone())
-            .collect();
-        info!("Fetching all routetables");
-        async move { crate::aws::get_route_tables(&ec2_client, &subnet_ids).await }
+        let cluster_info = cluster_info.clone();
+        let ec2_client = ec2_client.clone();
+        async move {
+            let aws_subnets = crate::aws::get_subnets(&ec2_client, &cluster_info.subnets.clone())
+                .await
+                .expect("Could not retrieve configured subnets");
+            let all_subnets = crate::aws::get_all_subnets(&ec2_client, &aws_subnets)
+                .await
+                .expect("did not get subnets from vpc");
+            let subnet_ids = all_subnets
+                .iter()
+                .map(|s| s.subnet_id.as_ref().unwrap().clone())
+                .collect();
+            info!("Fetching all routetables");
+            let routetables = crate::aws::get_route_tables(&ec2_client, &subnet_ids)
+                .await
+                .expect("Could not retrieve routetables");
+            (aws_subnets, all_subnets, routetables)
+        }
     });
     info!("Fetching all subnets");
 
-    let lb_enis = h1.await.unwrap().unwrap();
-    let routetables = h2.await.unwrap().unwrap();
+    let (lbs, lb_enis) = h1.await.unwrap();
+    let (configured_subnets, all_subnets, routetables) = h2.await.unwrap();
 
     let cn = ClusterNetwork::new(
         &options.clusterid,
