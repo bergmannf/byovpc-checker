@@ -21,8 +21,8 @@ use crate::types::Verifier;
 #[derive(Parser, Debug, Clone)]
 #[command(
     version,
-    about,
-    long_about = "Verifies if the VPC setup for the cluster is valid"
+    about = "Verifies if the VPC setup for the cluster is valid. AWS configuration must be setup to access the cluster's AWS account.",
+    long_about = "Verifies if the VPC setup for the cluster is valid. AWS configuration must be setup to access the cluster's AWS account."
 )]
 struct Options {
     #[arg(short, long)]
@@ -74,7 +74,7 @@ async fn main() -> Result<(), Error> {
         }
     });
 
-    info!("Fetching configured subnets");
+    info!("Fetching Subnet data");
     let h2 = tokio::spawn({
         let cluster_info = cluster_info.clone();
         let ec2_client = ec2_client.clone();
