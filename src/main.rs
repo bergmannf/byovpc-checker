@@ -79,7 +79,7 @@ async fn main() -> Result<(), Error> {
         let cluster_info = cluster_info.clone();
         let ec2_client = ec2_client.clone();
         async move {
-            let aws_subnets = crate::aws::get_subnets(&ec2_client, &cluster_info.subnets.clone())
+            let aws_subnets = crate::aws::get_subnets(&ec2_client, &cluster_info)
                 .await
                 .expect("Could not retrieve configured subnets");
             let all_subnets = crate::aws::get_all_subnets(&ec2_client, &aws_subnets)
@@ -96,13 +96,13 @@ async fn main() -> Result<(), Error> {
             (aws_subnets, all_subnets, routetables)
         }
     });
-    info!("Fetching all subnets");
 
     let (lbs, lb_enis) = h1.await.unwrap();
     let (configured_subnets, all_subnets, routetables) = h2.await.unwrap();
 
     let cn = ClusterNetwork::new(
         &options.clusterid,
+        &cluster_info.cluster_infra_name,
         configured_subnets,
         all_subnets,
         routetables,

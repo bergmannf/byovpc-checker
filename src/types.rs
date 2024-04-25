@@ -65,13 +65,18 @@ impl MinimalClusterInfo {
             .and_then(|v| v.get("subnet_ids"))
             .and_then(|v| v.as_array());
         let subnets: Vec<String> = if let Some(sx) = sxs {
-            sx.iter()
-                .map(|v| {
-                    v.as_str()
-                        .expect("converting subnet to str failed")
-                        .to_string()
-                })
-                .collect()
+            if sx.is_empty() {
+                warn!("No subnet ids configured - this will make some checks relying on this useless.");
+                vec![]
+            } else {
+                sx.iter()
+                    .map(|v| {
+                        v.as_str()
+                            .expect("converting subnet to str failed")
+                            .to_string()
+                    })
+                    .collect()
+            }
         } else {
             warn!("No subnet ids configured - this will make some checks relying on this useless.");
             vec![]

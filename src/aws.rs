@@ -19,6 +19,7 @@ use hyper::Uri;
 use hyper_proxy::{Intercept, Proxy, ProxyConnector};
 use log::debug;
 use log::error;
+use log::info;
 use url::Url;
 
 use crate::types::InvariantError;
@@ -115,16 +116,36 @@ pub async fn aws_setup() -> SdkConfig {
 
 pub async fn get_subnets(
     ec2_client: &EC2Client,
-    subnet_ids: &Vec<String>,
+    cluster_info: &MinimalClusterInfo,
 ) -> Result<Vec<Subnet>, aws_sdk_ec2::Error> {
-    match ec2_client
-        .describe_subnets()
-        .set_subnet_ids(Some(subnet_ids.clone()))
-        .send()
-        .await
-    {
-        Ok(success) => Ok(success.subnets.unwrap()),
-        Err(err) => Err(aws_sdk_ec2::Error::from(err)),
+    let cluster_name_tag = format!("{}{}", CLUSTER_TAG_PREFIX, cluster_info.cluster_infra_name);
+    if !cluster_info.subnets.is_empty() {
+        info!("Fetching subnets via IDs");
+        match ec2_client
+            .describe_subnets()
+            .set_subnet_ids(Some(cluster_info.subnets.clone()))
+            .send()
+            .await
+        {
+            Ok(success) => Ok(success.subnets.unwrap()),
+            Err(err) => Err(aws_sdk_ec2::Error::from(err)),
+        }
+    } else {
+        info!("Fetching subnets via tags");
+        match ec2_client
+            .describe_subnets()
+            .filters(
+                Filter::builder()
+                    .name("tag-key")
+                    .values(cluster_name_tag)
+                    .build(),
+            )
+            .send()
+            .await
+        {
+            Ok(success) => Ok(success.subnets.unwrap()),
+            Err(err) => Err(aws_sdk_ec2::Error::from(err)),
+        }
     }
 }
 

@@ -15,6 +15,7 @@ pub const CLUSTER_TAG: &str = "kubernetes.io/cluster/";
 
 pub struct ClusterNetwork<'a> {
     clusterid: &'a str,
+    infra_name: &'a str,
     configured_subnets: Vec<aws_sdk_ec2::types::Subnet>,
     all_subnets: Vec<aws_sdk_ec2::types::Subnet>,
     routetables: Vec<aws_sdk_ec2::types::RouteTable>,
@@ -26,6 +27,7 @@ pub struct ClusterNetwork<'a> {
 impl<'a> ClusterNetwork<'a> {
     pub fn new(
         clusterid: &'a str,
+        infra_name: &'a str,
         configured_subnets: Vec<aws_sdk_ec2::types::Subnet>,
         all_subnets: Vec<aws_sdk_ec2::types::Subnet>,
         routetables: Vec<aws_sdk_ec2::types::RouteTable>,
@@ -50,6 +52,7 @@ impl<'a> ClusterNetwork<'a> {
         }
         ClusterNetwork {
             clusterid,
+            infra_name,
             configured_subnets,
             all_subnets,
             routetables,
@@ -141,7 +144,9 @@ impl<'a> ClusterNetwork<'a> {
                 if let (Some(key), Some(value)) = (&tag.key, &tag.value) {
                     if key.contains(&CLUSTER_TAG) {
                         missing_cluster_tag = false;
-                        if !key.contains(&self.clusterid) && value == "owned" {
+                        if !(key.contains(&self.clusterid) || key.contains(&self.infra_name))
+                            && value == "owned"
+                        {
                             incorrect_cluster_tag = key.clone();
                         }
                     }
@@ -313,6 +318,7 @@ mod tests {
             .build();
         let cn = ClusterNetwork::new(
             "1",
+            "",
             vec![subnet.clone()],
             vec![subnet.clone()],
             vec![],
@@ -338,6 +344,7 @@ mod tests {
         }
         let cn = ClusterNetwork::new(
             "1",
+            "",
             subnets.clone(),
             subnets.clone(),
             vec![],
@@ -358,6 +365,7 @@ mod tests {
             make_public_subnet("1", "us-east-1a", &HashMap::from([(PUBLIC_ELB_TAG, "1")]));
         let cn = ClusterNetwork::new(
             clusterid,
+            "",
             vec![public_subnet.clone()],
             vec![public_subnet.clone()],
             vec![public_rtb.clone()],
@@ -384,6 +392,7 @@ mod tests {
         );
         let cn = ClusterNetwork::new(
             clusterid,
+            "1",
             vec![public_subnet.clone()],
             vec![public_subnet.clone()],
             vec![public_rtb.clone()],
