@@ -5,8 +5,11 @@ use aws_config::meta::region::RegionProviderChain;
 use aws_config::BehaviorVersion;
 use aws_config::SdkConfig;
 use aws_sdk_ec2::types::Filter;
+use aws_sdk_ec2::types::GroupIdentifier;
+use aws_sdk_ec2::types::Instance;
 use aws_sdk_ec2::types::NetworkInterface;
 use aws_sdk_ec2::types::RouteTable;
+use aws_sdk_ec2::types::SecurityGroup;
 use aws_sdk_ec2::types::Subnet;
 use aws_sdk_ec2::Client as EC2Client;
 use aws_sdk_elasticloadbalancingv2::operation::describe_load_balancers::DescribeLoadBalancersOutput;
@@ -304,6 +307,57 @@ pub async fn get_load_balancer_enis(
     Ok(network_interfaces.unwrap())
 }
 
-pub async fn get_security_groups(ec2_client: &EC2Client, cluster_info: &MinimalClusterInfo) {
-    panic!("not implemented")
+/// Returns the instances in this account with a matching cluster tag.
+pub async fn get_instances(
+    ec2_client: &EC2Client,
+    cluster_info: &MinimalClusterInfo,
+) -> Result<Vec<Instance>, aws_sdk_ec2::Error> {
+    let openshift_instances;
+    match ec2_client
+        .describe_instances()
+        .filters(Filter::builder().name("").values("").build())
+        .send()
+        .await
+    {
+        Ok(instance_output) => {
+            openshift_instances = instance_output
+                .reservations
+                .expect("Expected reservations to bet set")
+                .into_iter()
+                .map(|r| r.instances.unwrap())
+                .flatten()
+                .collect()
+        }
+        Err(err) => return Err(aws_sdk_ec2::Error::from(err)),
+    }
+    Ok(openshift_instances)
+}
+
+/// Returns the security groups in use by instances of the cluster.
+pub async fn get_security_groups(
+    ec2_client: &EC2Client,
+    cluster_info: &MinimalClusterInfo,
+) -> Result<Vec<SecurityGroup>, aws_sdk_ec2::Error> {
+    let instances = get_instances(ec2_client, cluster_info).await;
+    let instance_security_groups = if let Ok(is) = instances {
+        let mut sgs: Vec<GroupIdentifier> = is
+            .into_iter()
+            .map(|i| i.security_groups.unwrap())
+            .flatten()
+            .collect();
+        sgs.dedup();
+        ec2_client
+            .describe_security_groups()
+            .set_group_ids(Some(
+                sgs.into_iter().map(|sg| sg.group_id.unwrap()).collect(),
+            ))
+            .send()
+            .await
+    } else {
+        return Err(instances.err().unwrap());
+    };
+    match instance_security_groups {
+        Ok(sg) => return Ok(sg.security_groups.unwrap()),
+        Err(e) => return Err(aws_sdk_ec2::Error::from(e)),
+    }
 }
