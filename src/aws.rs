@@ -96,6 +96,7 @@ pub fn determine_proxy() -> Option<ProxyConnector<HttpConnector>> {
 
 pub async fn aws_setup() -> SdkConfig {
     let region_provider = RegionProviderChain::default_provider().or_else("us-east-1");
+    debug!("Using region: {}", region_provider.region().await.unwrap());
     let config = if let Some(proxy) = determine_proxy() {
         debug!("Using proxy");
         let client =
@@ -154,19 +155,41 @@ pub async fn get_subnets(
 
 pub async fn get_all_subnets(
     ec2_client: &EC2Client,
+    cluster_info: &MinimalClusterInfo,
     configured_subnets: &Vec<Subnet>,
 ) -> Result<Vec<Subnet>, Box<dyn Error>> {
     debug!("Retrieving subnets");
-    let mut vpc_ids: Vec<&String> = configured_subnets
-        .iter()
-        .map(|s| s.vpc_id.as_ref().unwrap())
-        .collect();
-    vpc_ids.dedup();
-    if vpc_ids.len() > 1 {
+    let vpcs;
+    let vpc_ids = if configured_subnets.len() > 0 {
+        debug!("Using configured subnets");
+        let mut vpc_ids: Vec<&String> = configured_subnets
+            .iter()
+            .map(|s| s.vpc_id.as_ref().unwrap())
+            .collect();
+        vpc_ids.dedup();
+        vpc_ids
+    } else {
+        debug!("Retrieving all VPCs tagged for cluster");
+        let cluster_tag = format!(
+            "tag:{}{}",
+            CLUSTER_TAG_PREFIX, cluster_info.cluster_infra_name
+        );
+        let vpc_res = ec2_client
+            .describe_vpcs()
+            .filters(Filter::builder().name(cluster_tag).values("owned").build())
+            .send()
+            .await;
+        vpcs = vpc_res
+            .expect("could not retrieve VPCs by tag")
+            .vpcs
+            .unwrap();
+        vpcs.iter().map(|v| v.vpc_id.as_ref().unwrap()).collect()
+    };
+    if vpc_ids.len() != 1 {
         return Err(Box::new(InvariantError {
             msg: format!(
-                "More than 1 VPC found associated with cluster subnets: {:?}",
-                vpc_ids
+                "Invalid number of VPCs found associated with cluster: {:?}",
+                vpc_ids.len()
             ),
         }));
     }
@@ -312,10 +335,14 @@ pub async fn get_instances(
     ec2_client: &EC2Client,
     cluster_info: &MinimalClusterInfo,
 ) -> Result<Vec<Instance>, aws_sdk_ec2::Error> {
+    let cluster_tag = format!(
+        "tag:{}{}",
+        CLUSTER_TAG_PREFIX, cluster_info.cluster_infra_name
+    );
     let openshift_instances;
     match ec2_client
         .describe_instances()
-        .filters(Filter::builder().name("").values("").build())
+        .filters(Filter::builder().name(cluster_tag).values("owned").build())
         .send()
         .await
     {

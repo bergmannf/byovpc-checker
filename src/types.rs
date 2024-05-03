@@ -118,7 +118,7 @@ impl MinimalClusterInfo {
         }
         if let Some(product) = cluster_json.get("product").and_then(|v| v.get("id")) {
             debug!("Checking OSD|Rosa: {}", product);
-            if product == "OSD" {
+            if product == "osd" {
                 return Some(ClusterType::Osd);
             } else if product == "rosa" {
                 return Some(ClusterType::Rosa);

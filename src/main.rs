@@ -8,7 +8,7 @@ mod checks;
 mod types;
 
 use checks::network::ClusterNetwork;
-use log::info;
+use log::{debug, info};
 use std::process::exit;
 use types::MinimalClusterInfo;
 
@@ -82,7 +82,7 @@ async fn main() -> Result<(), Error> {
             let aws_subnets = crate::aws::get_subnets(&ec2_client, &cluster_info)
                 .await
                 .expect("Could not retrieve configured subnets");
-            let all_subnets = crate::aws::get_all_subnets(&ec2_client, &aws_subnets)
+            let all_subnets = crate::aws::get_all_subnets(&ec2_client, &cluster_info, &aws_subnets)
                 .await
                 .expect("did not get subnets from vpc");
             let subnet_ids = all_subnets
@@ -97,8 +97,27 @@ async fn main() -> Result<(), Error> {
         }
     });
 
+    info!("Fetching instances and security groups");
+    let h3 = tokio::spawn({
+        let cluster_info = cluster_info.clone();
+        let ec2_client = ec2_client.clone();
+        async move {
+            let instances = crate::aws::get_instances(&ec2_client, &cluster_info)
+                .await
+                .expect("Could not retrieve instances");
+            let security_groups = crate::aws::get_security_groups(&ec2_client, &cluster_info)
+                .await
+                .expect("Could not retrieve security group");
+            (instances, security_groups)
+        }
+    });
+
     let (lbs, lb_enis) = h1.await.unwrap();
     let (configured_subnets, all_subnets, routetables) = h2.await.unwrap();
+    let (instances, security_groups) = h3.await.unwrap();
+
+    debug!("{:?}", instances);
+    debug!("{:?}", security_groups);
 
     let cn = ClusterNetwork::new(
         &options.clusterid,
