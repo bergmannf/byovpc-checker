@@ -72,7 +72,7 @@ impl<'a> ClusterNetwork<'a> {
                         .destination_cidr_block
                         .clone()
                         .is_some_and(|f| f == "0.0.0.0/0");
-                    if is_0_cidr && (r.transit_gateway_id.is_some() || r.gateway_id.is_some()) {
+                    if is_0_cidr && r.gateway_id.as_ref().is_some_and(|g| g.starts_with("igw-")) {
                         public_subnets.push(subnet.clone())
                     }
                 }
