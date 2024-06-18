@@ -12,9 +12,12 @@ use aws_sdk_ec2::types::RouteTable;
 use aws_sdk_ec2::types::SecurityGroup;
 use aws_sdk_ec2::types::Subnet;
 use aws_sdk_ec2::Client as EC2Client;
+use aws_sdk_elasticloadbalancing::types::LoadBalancerDescription;
+use aws_sdk_elasticloadbalancing::types::Tag as TagV1;
+use aws_sdk_elasticloadbalancing::Client as ELBClient;
 use aws_sdk_elasticloadbalancingv2::operation::describe_load_balancers::DescribeLoadBalancersOutput;
 use aws_sdk_elasticloadbalancingv2::types::LoadBalancer;
-use aws_sdk_elasticloadbalancingv2::types::Tag;
+use aws_sdk_elasticloadbalancingv2::types::Tag as TagV2;
 use aws_sdk_elasticloadbalancingv2::Client as ELBv2Client;
 use headers::Authorization;
 use hyper::client::HttpConnector;
@@ -33,6 +36,32 @@ pub const DEFAULT_ROUTER_VALUE_HYPERSHIFT: &str = "openshift-ingress/router-defa
 pub const DEFAULT_ROUTER_TAG: &str = "openshift-ingress/router-default";
 pub const CLUSTER_TAG_PREFIX: &str = "kubernetes.io/cluster/";
 
+#[derive(Debug)]
+struct Tag {
+    /// <p>The key of the tag.</p>
+    pub key: Option<String>,
+    /// <p>The value of the tag.</p>
+    pub value: Option<String>,
+}
+
+impl From<TagV1> for Tag {
+    fn from(value: TagV1) -> Self {
+        Tag {
+            key: Some(value.key),
+            value: value.value,
+        }
+    }
+}
+
+impl From<TagV2> for Tag {
+    fn from(value: TagV2) -> Self {
+        Tag {
+            key: value.key,
+            value: value.value,
+        }
+    }
+}
+
 trait Collector {
     fn match_tag(&self, t: Tag) -> bool;
 }
@@ -46,6 +75,10 @@ struct DefaultCollector<'a> {
 
 impl Collector for HypershiftCollector {
     fn match_tag(&self, t: Tag) -> bool {
+        debug!(
+            "Checking if {:?} matches {} with value {}",
+            t, DEFAULT_ROUTER_TAG_HYPERSHIFT, DEFAULT_ROUTER_VALUE_HYPERSHIFT
+        );
         t.key.is_some_and(|t| t == DEFAULT_ROUTER_TAG_HYPERSHIFT)
             && t.value
                 .is_some_and(|t| t == DEFAULT_ROUTER_VALUE_HYPERSHIFT)
@@ -238,6 +271,66 @@ pub async fn get_route_tables(
     }
 }
 
+pub async fn get_classic_load_balancers(
+    elb_client: &ELBClient,
+    cluster_info: &MinimalClusterInfo,
+) -> Result<Vec<LoadBalancerDescription>, aws_sdk_elasticloadbalancing::Error> {
+    debug!("Retrieving classic LoadBalancers");
+    let collector: Box<dyn Collector + Send> = match cluster_info.cluster_type {
+        crate::types::ClusterType::Hypershift => {
+            debug!("Using hypershift collector");
+            Box::new(HypershiftCollector {})
+        }
+        _ => {
+            debug!("Using default collector");
+            Box::new(DefaultCollector {
+                cluster_id: &cluster_info.cluster_id,
+                cluster_infra_name: &cluster_info.cluster_infra_name,
+            })
+        }
+    };
+    let mut lb_names = HashMap::new();
+    let lb_out;
+    match elb_client.describe_load_balancers().send().await {
+        Ok(success) => lb_out = success,
+        Err(err) => return Err(aws_sdk_elasticloadbalancing::Error::from(err)),
+    };
+    if let Some(lbs) = lb_out.load_balancer_descriptions {
+        for lb in lbs {
+            let lb_name = lb.load_balancer_name.as_ref().unwrap().clone();
+            lb_names.insert(lb_name, lb);
+        }
+    }
+    for (lb_name, lb_val) in lb_names {
+        debug!("Checking loadbalancer: {}", lb_name);
+        let tags;
+        match elb_client
+            .describe_tags()
+            .load_balancer_names(lb_name)
+            .send()
+            .await
+        {
+            Ok(success) => tags = success,
+            Err(err) => return Err(aws_sdk_elasticloadbalancing::Error::from(err)),
+        };
+        let mut cluster_lbs = vec![];
+        if let Some(tag_descriptions) = tags.tag_descriptions {
+            for td in tag_descriptions {
+                if let Some(tag) = td.tags {
+                    for t in tag {
+                        debug!("Checking tag: {:?}", t);
+                        if collector.match_tag(t.into()) {
+                            debug!("Tag matched");
+                            cluster_lbs.push(lb_val.clone())
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return Ok(vec![]);
+}
+
 pub async fn get_load_balancers(
     elb_client: &ELBv2Client,
     cluster_info: &MinimalClusterInfo,
@@ -257,7 +350,7 @@ pub async fn get_load_balancers(
             })
         }
     };
-    let mut default_router_lbs = vec![];
+    let mut cluster_lbs = vec![];
     let lb_out: DescribeLoadBalancersOutput;
     match elb_client.describe_load_balancers().send().await {
         Ok(success) => lb_out = success,
@@ -286,16 +379,16 @@ pub async fn get_load_balancers(
                 if let Some(tag) = td.tags {
                     for t in tag {
                         debug!("Checking tag: {:?}", t);
-                        if collector.match_tag(t) {
+                        if collector.match_tag(t.into()) {
                             debug!("Tag matched");
-                            default_router_lbs.push(lb_val.clone())
+                            cluster_lbs.push(lb_val.clone())
                         }
                     }
                 }
             }
         }
     }
-    Ok(default_router_lbs)
+    Ok(cluster_lbs)
 }
 
 pub async fn get_load_balancer_enis(

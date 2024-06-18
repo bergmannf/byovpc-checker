@@ -13,6 +13,7 @@ use std::process::exit;
 use types::MinimalClusterInfo;
 
 use aws_sdk_ec2::{Client as EC2Client, Error};
+use aws_sdk_elasticloadbalancing::Client as ELBv1Client;
 use aws_sdk_elasticloadbalancingv2::Client as ELBv2Client;
 use clap::Parser;
 
@@ -55,6 +56,7 @@ async fn main() -> Result<(), Error> {
 
     let ec2_client = EC2Client::new(&aws_config);
     let elbv2_client = ELBv2Client::new(&aws_config);
+    let elbv1_client = ELBv1Client::new(&aws_config);
 
     info!("Fetching LoadBalancer data");
     let h1 = tokio::spawn({
@@ -65,12 +67,15 @@ async fn main() -> Result<(), Error> {
             let lbs = crate::aws::get_load_balancers(&elbv2_client, &cluster_info)
                 .await
                 .expect("could not retrieve load balancers");
+            let classic_lbs = crate::aws::get_classic_load_balancers(&elbv1_client, &cluster_info)
+                .await
+                .expect("could not retrieve classic load balancers");
             let ec2_client = ec2_client.clone();
             let lbs = lbs.clone();
             let eni_lbs = crate::aws::get_load_balancer_enis(&ec2_client, &lbs)
                 .await
                 .expect("could not retrieve ENIs");
-            (lbs, eni_lbs)
+            (lbs, classic_lbs, eni_lbs)
         }
     });
 
@@ -112,7 +117,7 @@ async fn main() -> Result<(), Error> {
         }
     });
 
-    let (lbs, lb_enis) = h1.await.unwrap();
+    let (lbs, classic_lbs, lb_enis) = h1.await.unwrap();
     let (configured_subnets, all_subnets, routetables) = h2.await.unwrap();
     let (instances, security_groups) = h3.await.unwrap();
 
@@ -127,6 +132,7 @@ async fn main() -> Result<(), Error> {
         routetables,
         lbs,
         lb_enis,
+        classic_lbs,
     );
     for res in cn.verify() {
         println!("{}", res);

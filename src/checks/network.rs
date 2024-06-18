@@ -22,6 +22,7 @@ pub struct ClusterNetwork<'a> {
     subnet_routetable_mapping: HashMap<String, aws_sdk_ec2::types::RouteTable>,
     load_balancers: Vec<aws_sdk_elasticloadbalancingv2::types::LoadBalancer>,
     load_balancer_enis: Vec<aws_sdk_ec2::types::NetworkInterface>,
+    classic_load_balancers: Vec<aws_sdk_elasticloadbalancing::types::LoadBalancerDescription>,
 }
 
 impl<'a> ClusterNetwork<'a> {
@@ -33,6 +34,7 @@ impl<'a> ClusterNetwork<'a> {
         routetables: Vec<aws_sdk_ec2::types::RouteTable>,
         load_balancers: Vec<aws_sdk_elasticloadbalancingv2::types::LoadBalancer>,
         load_balancer_enis: Vec<aws_sdk_ec2::types::NetworkInterface>,
+        classic_load_balancers: Vec<aws_sdk_elasticloadbalancing::types::LoadBalancerDescription>,
     ) -> ClusterNetwork<'a> {
         let mut subnet_to_routetables: HashMap<String, aws_sdk_ec2::types::RouteTable> =
             HashMap::new();
@@ -59,6 +61,7 @@ impl<'a> ClusterNetwork<'a> {
             subnet_routetable_mapping: subnet_to_routetables,
             load_balancers,
             load_balancer_enis,
+            classic_load_balancers,
         }
     }
 
