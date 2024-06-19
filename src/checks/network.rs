@@ -327,6 +327,7 @@ mod tests {
             vec![],
             vec![],
             vec![],
+            vec![],
         );
         let result = cn.verify_number_of_subnets();
         assert_eq!(
@@ -353,6 +354,7 @@ mod tests {
             vec![],
             vec![],
             vec![],
+            vec![],
         );
         let result = cn.verify_number_of_subnets();
         assert_eq!(
@@ -372,6 +374,7 @@ mod tests {
             vec![public_subnet.clone()],
             vec![public_subnet.clone()],
             vec![public_rtb.clone()],
+            vec![],
             vec![],
             vec![],
         );
@@ -399,6 +402,7 @@ mod tests {
             vec![public_subnet.clone()],
             vec![public_subnet.clone()],
             vec![public_rtb.clone()],
+            vec![],
             vec![],
             vec![],
         );
