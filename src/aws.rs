@@ -36,6 +36,14 @@ pub const DEFAULT_ROUTER_VALUE_HYPERSHIFT: &str = "openshift-ingress/router-defa
 pub const DEFAULT_ROUTER_TAG: &str = "openshift-ingress/router-default";
 pub const CLUSTER_TAG_PREFIX: &str = "kubernetes.io/cluster/";
 
+// Abstracts over classic and modern loadbalancers where needed.
+// Allows the method to dispatch using match where needed.
+#[derive(Debug)]
+pub enum AWSLoadBalancer {
+    ClassicLoadBalancer(LoadBalancerDescription),
+    ModernLoadBalancer(LoadBalancer),
+}
+
 #[derive(Debug)]
 struct Tag {
     /// <p>The key of the tag.</p>
@@ -393,17 +401,22 @@ pub async fn get_load_balancers(
 
 pub async fn get_load_balancer_enis(
     ec2_client: &EC2Client,
-    lbs: &Vec<LoadBalancer>,
+    lbs: &Vec<AWSLoadBalancer>,
 ) -> Result<Vec<NetworkInterface>, aws_sdk_ec2::Error> {
     debug!("Retrieving ENIs for LoadBalancers");
     let network_interfaces;
     // aws ec2 describe-network-interfaces --filters Name=description,Values="ELB $MC_LB_NAME" --query 'NetworkInterfaces[].PrivateIpAddresses[].PrivateIpAddress' --no-cli-pager --output yaml >> "$TMP_FILE"
     let descriptions: Vec<String> = lbs
         .iter()
-        .map(|lb| {
-            lb.load_balancer_name
+        .map(|lb| match &lb {
+            &AWSLoadBalancer::ClassicLoadBalancer(lb) => lb
+                .load_balancer_name()
                 .as_ref()
-                .map_or("".to_string(), |n| format!("ELB {}", n))
+                .map_or("".to_string(), |n| format!("ELB {}", n)),
+            &AWSLoadBalancer::ModernLoadBalancer(lb) => lb
+                .load_balancer_name()
+                .as_ref()
+                .map_or("".to_string(), |n| format!("ELB {}", n)),
         })
         .collect();
     let result = ec2_client

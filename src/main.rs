@@ -72,7 +72,18 @@ async fn main() -> Result<(), Error> {
                 .expect("could not retrieve classic load balancers");
             let ec2_client = ec2_client.clone();
             let lbs = lbs.clone();
-            let eni_lbs = crate::aws::get_load_balancer_enis(&ec2_client, &lbs)
+            let mut mlbs: Vec<crate::aws::AWSLoadBalancer> = lbs
+                .clone()
+                .into_iter()
+                .map(|l| crate::aws::AWSLoadBalancer::ModernLoadBalancer(l))
+                .collect();
+            let mut clbs: Vec<crate::aws::AWSLoadBalancer> = classic_lbs
+                .clone()
+                .into_iter()
+                .map(|l| crate::aws::AWSLoadBalancer::ClassicLoadBalancer(l))
+                .collect();
+            clbs.append(&mut mlbs);
+            let eni_lbs = crate::aws::get_load_balancer_enis(&ec2_client, &clbs)
                 .await
                 .expect("could not retrieve ENIs");
             (lbs, classic_lbs, eni_lbs)
