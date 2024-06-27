@@ -3,8 +3,8 @@
 //! bring-your-own-VPC checks - meaning the networking setup was performed by
 //! the user, not the installer.
 
-mod aws;
 mod checks;
+mod gatherer;
 mod types;
 
 use checks::network::ClusterNetwork;
@@ -52,7 +52,7 @@ async fn main() -> Result<(), Error> {
         exit(1)
     }
 
-    let aws_config = crate::aws::aws_setup().await;
+    let aws_config = crate::gatherer::aws::aws_setup().await;
 
     let ec2_client = EC2Client::new(&aws_config);
     let elbv2_client = ELBv2Client::new(&aws_config);
@@ -64,26 +64,29 @@ async fn main() -> Result<(), Error> {
         let ec2_client = ec2_client.clone();
         async move {
             info!("Fetching load balancers");
-            let lbs = crate::aws::get_load_balancers(&elbv2_client, &cluster_info)
+            let lbs = crate::gatherer::aws::get_load_balancers(&elbv2_client, &cluster_info)
                 .await
                 .expect("could not retrieve load balancers");
-            let classic_lbs = crate::aws::get_classic_load_balancers(&elbv1_client, &cluster_info)
-                .await
-                .expect("could not retrieve classic load balancers");
+            let classic_lbs =
+                crate::gatherer::aws::get_classic_load_balancers(&elbv1_client, &cluster_info)
+                    .await
+                    .expect("could not retrieve classic load balancers");
             let ec2_client = ec2_client.clone();
             let lbs = lbs.clone();
-            let mut mlbs: Vec<crate::aws::AWSLoadBalancer> = lbs
+            let mut mlbs: Vec<crate::gatherer::aws::shared_types::AWSLoadBalancer> = lbs
                 .clone()
                 .into_iter()
-                .map(|l| crate::aws::AWSLoadBalancer::ModernLoadBalancer(l))
+                .map(|l| crate::gatherer::aws::shared_types::AWSLoadBalancer::ModernLoadBalancer(l))
                 .collect();
-            let mut clbs: Vec<crate::aws::AWSLoadBalancer> = classic_lbs
+            let mut clbs: Vec<crate::gatherer::aws::shared_types::AWSLoadBalancer> = classic_lbs
                 .clone()
                 .into_iter()
-                .map(|l| crate::aws::AWSLoadBalancer::ClassicLoadBalancer(l))
+                .map(|l| {
+                    crate::gatherer::aws::shared_types::AWSLoadBalancer::ClassicLoadBalancer(l)
+                })
                 .collect();
             clbs.append(&mut mlbs);
-            let eni_lbs = crate::aws::get_load_balancer_enis(&ec2_client, &clbs)
+            let eni_lbs = crate::gatherer::aws::get_load_balancer_enis(&ec2_client, &clbs)
                 .await
                 .expect("could not retrieve ENIs");
             (lbs, classic_lbs, eni_lbs)
@@ -95,18 +98,22 @@ async fn main() -> Result<(), Error> {
         let cluster_info = cluster_info.clone();
         let ec2_client = ec2_client.clone();
         async move {
-            let aws_subnets = crate::aws::get_subnets(&ec2_client, &cluster_info)
+            let aws_subnets = crate::gatherer::aws::ec2::get_subnets(&ec2_client, &cluster_info)
                 .await
                 .expect("Could not retrieve configured subnets");
-            let all_subnets = crate::aws::get_all_subnets(&ec2_client, &cluster_info, &aws_subnets)
-                .await
-                .expect("did not get subnets from vpc");
+            let all_subnets = crate::gatherer::aws::ec2::get_all_subnets(
+                &ec2_client,
+                &cluster_info,
+                &aws_subnets,
+            )
+            .await
+            .expect("did not get subnets from vpc");
             let subnet_ids = all_subnets
                 .iter()
                 .map(|s| s.subnet_id.as_ref().unwrap().clone())
                 .collect();
             info!("Fetching all routetables");
-            let routetables = crate::aws::get_route_tables(&ec2_client, &subnet_ids)
+            let routetables = crate::gatherer::aws::ec2::get_route_tables(&ec2_client, &subnet_ids)
                 .await
                 .expect("Could not retrieve routetables");
             (aws_subnets, all_subnets, routetables)
@@ -118,12 +125,13 @@ async fn main() -> Result<(), Error> {
         let cluster_info = cluster_info.clone();
         let ec2_client = ec2_client.clone();
         async move {
-            let instances = crate::aws::get_instances(&ec2_client, &cluster_info)
+            let instances = crate::gatherer::aws::ec2::get_instances(&ec2_client, &cluster_info)
                 .await
                 .expect("Could not retrieve instances");
-            let security_groups = crate::aws::get_security_groups(&ec2_client, &cluster_info)
-                .await
-                .expect("Could not retrieve security group");
+            let security_groups =
+                crate::gatherer::aws::ec2::get_security_groups(&ec2_client, &cluster_info)
+                    .await
+                    .expect("Could not retrieve security group");
             (instances, security_groups)
         }
     });
