@@ -4,7 +4,8 @@
 //! - Number of subnets in the VPC matches expectation (2 subnets per AZ)
 //! - The subnets in the VPC have the expected tags.
 
-use crate::types::{VerificationResult, Verifier};
+use crate::types::{MinimalClusterInfo, VerificationResult, Verifier};
+use aws_sdk_ec2::types::Subnet;
 use log::{debug, info};
 
 use std::collections::{HashMap, HashSet};
@@ -14,9 +15,7 @@ pub const PUBLIC_ELB_TAG: &str = "kubernetes.io/role/elb";
 pub const CLUSTER_TAG: &str = "kubernetes.io/cluster/";
 
 pub struct ClusterNetwork<'a> {
-    clusterid: &'a str,
-    infra_name: &'a str,
-    configured_subnets: Vec<aws_sdk_ec2::types::Subnet>,
+    cluster_info: &'a MinimalClusterInfo,
     all_subnets: Vec<aws_sdk_ec2::types::Subnet>,
     routetables: Vec<aws_sdk_ec2::types::RouteTable>,
     subnet_routetable_mapping: HashMap<String, aws_sdk_ec2::types::RouteTable>,
@@ -27,9 +26,7 @@ pub struct ClusterNetwork<'a> {
 
 impl<'a> ClusterNetwork<'a> {
     pub fn new(
-        clusterid: &'a str,
-        infra_name: &'a str,
-        configured_subnets: Vec<aws_sdk_ec2::types::Subnet>,
+        cluster_info: &'a MinimalClusterInfo,
         all_subnets: Vec<aws_sdk_ec2::types::Subnet>,
         routetables: Vec<aws_sdk_ec2::types::RouteTable>,
         load_balancers: Vec<aws_sdk_elasticloadbalancingv2::types::LoadBalancer>,
@@ -53,9 +50,7 @@ impl<'a> ClusterNetwork<'a> {
             }
         }
         ClusterNetwork {
-            clusterid,
-            infra_name,
-            configured_subnets,
+            cluster_info,
             all_subnets,
             routetables,
             subnet_routetable_mapping: subnet_to_routetables,
@@ -63,6 +58,20 @@ impl<'a> ClusterNetwork<'a> {
             load_balancer_enis,
             classic_load_balancers,
         }
+    }
+
+    fn configured_subnets(&self) -> Vec<Subnet> {
+        let mut configured_subnets = vec![];
+        for subnet in self.all_subnets.iter() {
+            if self
+                .cluster_info
+                .subnets
+                .contains(&subnet.subnet_id.clone().unwrap())
+            {
+                configured_subnets.push(subnet.clone())
+            }
+        }
+        configured_subnets
     }
 
     fn get_public_subnets(&self) -> Vec<String> {
@@ -147,7 +156,8 @@ impl<'a> ClusterNetwork<'a> {
                 if let (Some(key), Some(value)) = (&tag.key, &tag.value) {
                     if key.contains(&CLUSTER_TAG) {
                         missing_cluster_tag = false;
-                        if !(key.contains(&self.clusterid) || key.contains(&self.infra_name))
+                        if !(key.contains(&self.cluster_info.cluster_id)
+                            || key.contains(&self.cluster_info.cluster_infra_name))
                             && value == "owned"
                         {
                             incorrect_cluster_tag = key.clone();
@@ -212,8 +222,8 @@ impl<'a> ClusterNetwork<'a> {
     /// See https://access.redhat.com/documentation/en-us/red_hat_openshift_service_on_aws/4/html-single/networking/index#aws-installing-an-aws-load-balancer-operator_aws-load-balancer-operator
     pub fn verify_loadbalancer_subnets(&self) -> Vec<VerificationResult> {
         let mut verification_results = vec![];
-        let configured_subnet_ids: HashSet<&str> = self
-            .configured_subnets
+        let configured_subnets = self.configured_subnets();
+        let configured_subnet_ids: HashSet<&str> = configured_subnets
             .iter()
             .map(|s| s.subnet_id().unwrap())
             .collect();
@@ -251,7 +261,7 @@ impl<'a> Verifier for ClusterNetwork<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::aws::CLUSTER_TAG_PREFIX;
+    use crate::gatherer::aws::shared_types::CLUSTER_TAG_PREFIX;
 
     use super::*;
 
@@ -319,16 +329,14 @@ mod tests {
         let subnet = aws_sdk_ec2::types::Subnet::builder()
             .availability_zone("us-east-1a")
             .build();
-        let cn = ClusterNetwork::new(
-            "1",
-            "",
-            vec![subnet.clone()],
-            vec![subnet.clone()],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-        );
+        let mci = MinimalClusterInfo {
+            cluster_id: String::from("1"),
+            cluster_infra_name: String::from(""),
+            cluster_type: crate::types::ClusterType::Osd,
+            cloud_provider: String::from(""),
+            subnets: vec![String::from(subnet.subnet_id.clone().unwrap())],
+        };
+        let cn = ClusterNetwork::new(&mci, vec![subnet.clone()], vec![], vec![], vec![], vec![]);
         let result = cn.verify_number_of_subnets();
         assert_eq!(
             result,
@@ -346,16 +354,15 @@ mod tests {
                     .build(),
             );
         }
-        let cn = ClusterNetwork::new(
-            "1",
-            "",
-            subnets.clone(),
-            subnets.clone(),
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-        );
+        let subnet_ids = subnets.iter().map(|s| s.subnet_id.clone().unwrap());
+        let mci = MinimalClusterInfo {
+            cluster_id: String::from("1"),
+            cluster_infra_name: String::from(""),
+            cluster_type: crate::types::ClusterType::Osd,
+            cloud_provider: String::from(""),
+            subnets: subnet_ids.collect(),
+        };
+        let cn = ClusterNetwork::new(&mci, subnets.clone(), vec![], vec![], vec![], vec![]);
         let result = cn.verify_number_of_subnets();
         assert_eq!(
             result,
@@ -368,10 +375,15 @@ mod tests {
         let clusterid = "1";
         let (public_subnet, public_rtb) =
             make_public_subnet("1", "us-east-1a", &HashMap::from([(PUBLIC_ELB_TAG, "1")]));
+        let mci = &MinimalClusterInfo {
+            cluster_id: String::from(clusterid),
+            cluster_infra_name: String::from(""),
+            cluster_type: crate::types::ClusterType::Osd,
+            cloud_provider: String::from(""),
+            subnets: vec![public_subnet.subnet_id.clone().unwrap()],
+        };
         let cn = ClusterNetwork::new(
-            clusterid,
-            "",
-            vec![public_subnet.clone()],
+            &mci,
             vec![public_subnet.clone()],
             vec![public_rtb.clone()],
             vec![],
@@ -386,6 +398,35 @@ mod tests {
     }
 
     #[test]
+    fn test_verify_tags_only_other_cluster_tags() {
+        let clusterid = "1";
+        let (public_subnet, public_rtb) = make_public_subnet(
+            "1",
+            "us-east-1a",
+            &HashMap::from([
+                (PUBLIC_ELB_TAG, "1"),
+                (&format!("{}{}", CLUSTER_TAG_PREFIX, "2"), "shared"),
+            ]),
+        );
+        let mci = &MinimalClusterInfo {
+            cluster_id: String::from(clusterid),
+            cluster_infra_name: String::from(""),
+            cluster_type: crate::types::ClusterType::Osd,
+            cloud_provider: String::from(""),
+            subnets: vec![public_subnet.subnet_id.clone().unwrap()],
+        };
+        let cn = ClusterNetwork::new(
+            &mci,
+            vec![public_subnet.clone()],
+            vec![public_rtb.clone()],
+            vec![],
+            vec![],
+            vec![],
+        );
+        let results = cn.verify_subnet_tags();
+    }
+
+    #[test]
     fn test_verify_tags_incorrect_cluster_tag() {
         let clusterid = "1";
         let (public_subnet, public_rtb) = make_public_subnet(
@@ -396,10 +437,15 @@ mod tests {
                 (&format!("{}{}", CLUSTER_TAG_PREFIX, "2"), "owned"),
             ]),
         );
+        let mci = &MinimalClusterInfo {
+            cluster_id: String::from(clusterid),
+            cluster_infra_name: String::from(""),
+            cluster_type: crate::types::ClusterType::Osd,
+            cloud_provider: String::from(""),
+            subnets: vec![public_subnet.subnet_id.clone().unwrap()],
+        };
         let cn = ClusterNetwork::new(
-            clusterid,
-            "1",
-            vec![public_subnet.clone()],
+            &mci,
             vec![public_subnet.clone()],
             vec![public_rtb.clone()],
             vec![],

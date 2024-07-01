@@ -46,6 +46,7 @@ pub fn determine_proxy() -> Option<ProxyConnector<HttpConnector>> {
     Some(ProxyConnector::from_proxy(connector, proxy).unwrap())
 }
 
+/// Will setup the SdkConfig with a proxy if needed.
 pub async fn aws_setup() -> SdkConfig {
     let region_provider = RegionProviderChain::default_provider().or_else("us-east-1");
     debug!("Using region: {}", region_provider.region().await.unwrap());
