@@ -65,9 +65,13 @@ async fn main() -> Result<(), Error> {
         let ec2_client = ec2_client.clone();
         async move {
             info!("Fetching load balancers");
-            let lbs = crate::gatherer::aws::get_load_balancers(&elbv2_client, &cluster_info)
-                .await
-                .expect("could not retrieve load balancers");
+            let lbs = crate::gatherer::aws::loadbalancerv2::LoadBalancerGatherer {
+                client: &elbv2_client,
+                cluster_info: &cluster_info,
+            }
+            .gather()
+            .await
+            .expect("could not retrieve load balancers");
             let classic_lbs =
                 crate::gatherer::aws::get_classic_load_balancers(&elbv1_client, &cluster_info)
                     .await
@@ -135,20 +139,15 @@ async fn main() -> Result<(), Error> {
             .gather()
             .await
             .expect("Could not retrieve instances");
-            let security_groups =
-                crate::gatherer::aws::ec2::get_security_groups(&ec2_client, &cluster_info)
-                    .await
-                    .expect("Could not retrieve security group");
-            (instances, security_groups)
+            instances
         }
     });
 
     let (lbs, classic_lbs, lb_enis) = h1.await.unwrap();
     let (all_subnets, routetables) = h2.await.unwrap();
-    let (instances, security_groups) = h3.await.unwrap();
+    let instances = h3.await.unwrap();
 
     debug!("{:?}", instances);
-    debug!("{:?}", security_groups);
 
     let cn = ClusterNetwork::new(
         &cluster_info,

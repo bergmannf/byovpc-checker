@@ -5,7 +5,6 @@ pub mod shared_types;
 
 pub use crate::gatherer::aws::ec2::get_load_balancer_enis;
 pub use crate::gatherer::aws::loadbalancer::get_classic_load_balancers;
-pub use crate::gatherer::aws::loadbalancerv2::get_load_balancers;
 
 use aws_config::meta::region::RegionProviderChain;
 use aws_config::BehaviorVersion;

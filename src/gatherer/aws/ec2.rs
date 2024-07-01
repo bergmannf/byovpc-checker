@@ -11,7 +11,7 @@ use std::error::Error;
 use crate::gatherer::Gatherer;
 use crate::types::{InvariantError, MinimalClusterInfo};
 
-use super::shared_types::{AWSLoadBalancer, CLUSTER_TAG_PREFIX};
+use super::shared_types::{AWSInstance, AWSLoadBalancer, CLUSTER_TAG_PREFIX};
 
 /// Retrieves the subnets
 /// This gatherer will retrieve:
@@ -164,6 +164,33 @@ pub struct InstanceGatherer<'a> {
     pub cluster_info: &'a MinimalClusterInfo,
 }
 
+impl<'a> InstanceGatherer<'a> {
+    /// Returns the security groups in use by instances of the cluster.
+    pub async fn get_security_groups(
+        &self,
+        instances: &Vec<Instance>,
+    ) -> Result<Vec<SecurityGroup>, Box<dyn Error>> {
+        let mut sgs: Vec<GroupIdentifier> = instances
+            .into_iter()
+            .map(|i| i.security_groups.clone().unwrap())
+            .flatten()
+            .collect();
+        sgs.dedup();
+        let instance_security_groups = self
+            .client
+            .describe_security_groups()
+            .set_group_ids(Some(
+                sgs.into_iter().map(|sg| sg.group_id.unwrap()).collect(),
+            ))
+            .send()
+            .await;
+        match instance_security_groups {
+            Ok(sg) => return Ok(sg.security_groups.unwrap()),
+            Err(e) => return Err(Box::new(e)),
+        }
+    }
+}
+
 #[async_trait]
 impl<'a> Gatherer for InstanceGatherer<'a> {
     type Resource = Instance;
@@ -188,40 +215,31 @@ impl<'a> Gatherer for InstanceGatherer<'a> {
                     .into_iter()
                     .map(|r| r.instances.unwrap())
                     .flatten()
-                    .collect()
+                    .collect();
+                let security_groups = self
+                    .get_security_groups(&openshift_instances)
+                    .await
+                    .unwrap();
+                for instance in openshift_instances.iter() {
+                    let mut awsi = AWSInstance {
+                        instance: instance.clone(),
+                        security_groups: vec![],
+                    };
+                    for sg in security_groups.iter() {
+                        let group_identifiers: Vec<&String> = instance
+                            .security_groups()
+                            .iter()
+                            .map(|gi| gi.group_id.as_ref().unwrap())
+                            .collect();
+                        if group_identifiers.contains(&sg.group_id.as_ref().unwrap()) {
+                            awsi.security_groups.push(sg.clone());
+                        }
+                    }
+                }
             }
             Err(err) => return Err(Box::new(err)),
         }
         Ok(openshift_instances)
-    }
-}
-
-/// Returns the security groups in use by instances of the cluster.
-pub async fn get_security_groups(
-    ec2_client: &Client,
-    cluster_info: &MinimalClusterInfo,
-) -> Result<Vec<SecurityGroup>, aws_sdk_ec2::Error> {
-    let instances = get_instances(ec2_client, cluster_info).await;
-    let instance_security_groups = if let Ok(is) = instances {
-        let mut sgs: Vec<GroupIdentifier> = is
-            .into_iter()
-            .map(|i| i.security_groups.unwrap())
-            .flatten()
-            .collect();
-        sgs.dedup();
-        ec2_client
-            .describe_security_groups()
-            .set_group_ids(Some(
-                sgs.into_iter().map(|sg| sg.group_id.unwrap()).collect(),
-            ))
-            .send()
-            .await
-    } else {
-        return Err(instances.err().unwrap());
-    };
-    match instance_security_groups {
-        Ok(sg) => return Ok(sg.security_groups.unwrap()),
-        Err(e) => return Err(aws_sdk_ec2::Error::from(e)),
     }
 }
 

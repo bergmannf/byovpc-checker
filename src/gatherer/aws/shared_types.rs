@@ -1,3 +1,5 @@
+use aws_sdk_ec2::types::Instance;
+use aws_sdk_ec2::types::SecurityGroup;
 use aws_sdk_elasticloadbalancing::types::LoadBalancerDescription;
 use aws_sdk_elasticloadbalancing::types::Tag as TagV1;
 use aws_sdk_elasticloadbalancingv2::types::LoadBalancer;
@@ -78,4 +80,14 @@ impl<'a> Collector for DefaultCollector<'a> {
             .is_some_and(|t| t.contains(&cluster_id_tag) || t.contains(&cluster_name_tag))
             && t.value.is_some_and(|t| t == "owned" || t == "shared")
     }
+}
+
+pub struct AWSInstance {
+    pub instance: Instance,
+    pub security_groups: Vec<SecurityGroup>,
+}
+
+pub struct TaggedResource<T> {
+    t: T,
+    tags: Vec<Tag>,
 }
