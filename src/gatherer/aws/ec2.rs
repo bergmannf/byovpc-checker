@@ -5,6 +5,7 @@ use aws_sdk_ec2::{
     },
     Client,
 };
+use itertools::Itertools;
 use log::{debug, error, info};
 use std::error::Error;
 
@@ -120,7 +121,12 @@ impl<'a> Gatherer for ConfiguredSubnetGatherer<'a> {
         match self.get_subnets_by_vpc(vpcid).await {
             Ok(ref s) => {
                 all_subnets.extend(s.clone());
-                Ok(all_subnets)
+                let result: Vec<_> = all_subnets
+                    .clone()
+                    .into_iter()
+                    .unique_by(|s| s.clone().subnet_id)
+                    .collect();
+                Ok(result)
             }
             Err(e) => Err(e),
         }

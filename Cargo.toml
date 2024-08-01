@@ -19,6 +19,7 @@ env_logger = "0.11.3"
 headers = "0.3"
 hyper = "0.14"
 hyper-proxy = "0.9.1"
+itertools = "0.13.0"
 log = "0.4.21"
 serde_json = "1.0.114"
 tokio = { version = "1.36.0", features = ["full"] }

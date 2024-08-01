@@ -4,7 +4,7 @@
 //! - Number of subnets in the VPC matches expectation (2 subnets per AZ)
 //! - The subnets in the VPC have the expected tags.
 
-use crate::types::{MinimalClusterInfo, VerificationResult, Verifier};
+use crate::types::{ClusterType, MinimalClusterInfo, VerificationResult, Verifier};
 use aws_sdk_ec2::types::Subnet;
 use log::{debug, info};
 
@@ -123,11 +123,14 @@ impl<'a> ClusterNetwork<'a> {
 
     pub fn verify_number_of_subnets(&self) -> VerificationResult {
         info!("Checking number of subnets per AZ");
-        let mut subnets_per_az: HashMap<String, u8> = HashMap::new();
-        let mut problematic_azs: Vec<(String, u8)> = Vec::new();
+        let mut subnets_per_az: HashMap<(String, String), u8> = HashMap::new();
+        let mut problematic_azs: Vec<((String, String), u8)> = Vec::new();
         for subnet in self.all_subnets.iter() {
             let az = subnet.availability_zone.clone().unwrap();
-            *subnets_per_az.entry(az).or_insert(0) += 1;
+            info!("Checking {} in {}", subnet.subnet_id.as_ref().unwrap(), az);
+            *subnets_per_az
+                .entry((subnet.vpc_id.clone().unwrap(), az))
+                .or_insert(0) += 1;
         }
         for (az, number) in subnets_per_az {
             if number > 2 {
@@ -350,6 +353,7 @@ mod tests {
         for _ in 1..=3 {
             subnets.push(
                 aws_sdk_ec2::types::Subnet::builder()
+                    .vpc_id("vpc-1")
                     .availability_zone("us-east-1a")
                     .build(),
             );
@@ -366,7 +370,10 @@ mod tests {
         let result = cn.verify_number_of_subnets();
         assert_eq!(
             result,
-            VerificationResult::SubnetTooManyPerAZ(vec![("us-east-1a".to_string(), 3)])
+            VerificationResult::SubnetTooManyPerAZ(vec![(
+                ("vpc-1".to_string(), "us-east-1a".to_string()),
+                3
+            )])
         )
     }
 

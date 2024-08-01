@@ -133,7 +133,7 @@ impl MinimalClusterInfo {
 #[derive(Debug, PartialEq, Eq)]
 pub enum VerificationResult {
     Success(String),
-    SubnetTooManyPerAZ(Vec<(String, u8)>),
+    SubnetTooManyPerAZ(Vec<((String, String), u8)>),
     SubnetMissingClusterTag(String),
     SubnetIncorrectClusterTag(String, String),
     SubnetMissingPrivateElbTag(String),
@@ -148,17 +148,20 @@ impl Display for VerificationResult {
                 f.write_str(&format!("{} {}", "".green(), msg.green()))
             }
             VerificationResult::SubnetTooManyPerAZ(azs) => {
-                let results = azs.iter().map(|a| {
-                    let msg = format!(
-                        "{} AZ {} has {}: {}",
-                        "".red(),
-                        a.0.blue(),
-                        "too many subnets".red(),
-                        a.1
-                    );
-                    f.write_str(&msg)
-                });
-                results.collect()
+                let messages: Vec<String> = azs
+                    .iter()
+                    .map(|a| {
+                        format!(
+                            "{} AZ {} (vpc: {}) has {}: {}",
+                            "".red(),
+                            a.0 .1.blue(),
+                            a.0 .0.blue(),
+                            "too many subnets".red(),
+                            a.1
+                        )
+                    })
+                    .collect();
+                f.write_str(&messages.join("\n"))
             }
             VerificationResult::SubnetMissingClusterTag(subnet) => f.write_str(&format!(
                 "{} Subnet {} is {}",

@@ -47,7 +47,7 @@ async fn main() -> Result<(), Error> {
     let cluster_info = MinimalClusterInfo::get_cluster_info(&options.clusterid);
     if cluster_info.cloud_provider != "aws" {
         eprintln!(
-            "This check only works for BYOVPC AWS clusters, not: {}",
+            "This check only works for AWS clusters, not: {}",
             cluster_info.cloud_provider
         );
         exit(1)
