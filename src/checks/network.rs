@@ -144,6 +144,9 @@ impl<'a> ClusterNetwork<'a> {
         }
     }
 
+    /// Checks that the subnets are tagged correctly for:
+    /// - The cluster
+    /// - Public/Private subnet tags
     pub fn verify_subnet_tags(&self) -> Vec<VerificationResult> {
         info!("Checking tags per subnet");
         let mut verification_results = Vec::new();
@@ -220,10 +223,28 @@ impl<'a> ClusterNetwork<'a> {
         verification_results
     }
 
+    /// Checks that the subnets are using the routetables created by the installer
+    /// Only applicable for non-BYOVPC clusters
+    pub fn verify_subnet_routetables(&self) -> Vec<VerificationResult> {
+        if !self.cluster_info.subnets.is_empty() {
+            return vec![VerificationResult::Success(
+                "The cluster is BYOVPC - will not check routetables for subnets".to_string(),
+            )];
+        }
+        vec![]
+    }
+
     /// Verifies that a LB is using the subnets that are actually configured for the cluster.
     /// This can be incorrect, if subnet tagging was done incorrectly:
     /// See https://access.redhat.com/documentation/en-us/red_hat_openshift_service_on_aws/4/html-single/networking/index#aws-installing-an-aws-load-balancer-operator_aws-load-balancer-operator
     pub fn verify_loadbalancer_subnets(&self) -> Vec<VerificationResult> {
+        // If there are no configured subnets, the cluster is not BYOVPC, so
+        // not checking if LBs are using those subnets.
+        if self.cluster_info.subnets.is_empty() {
+            return vec![VerificationResult::Success(
+                "The cluster is not BYOVPC - will not check loadbalancers".to_string(),
+            )];
+        }
         let mut verification_results = vec![];
         let configured_subnets = self.configured_subnets();
         let configured_subnet_ids: HashSet<&str> = configured_subnets
