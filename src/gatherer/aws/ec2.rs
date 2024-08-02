@@ -12,7 +12,8 @@ use std::error::Error;
 use crate::gatherer::Gatherer;
 use crate::types::{InvariantError, MinimalClusterInfo};
 
-use super::shared_types::{AWSInstance, AWSLoadBalancer, CLUSTER_TAG_PREFIX};
+use super::shared_types::CLUSTER_TAG_PREFIX;
+use ::shared_types::{AWSInstance, AWSLoadBalancer};
 
 /// Retrieves the subnets
 /// This gatherer will retrieve:

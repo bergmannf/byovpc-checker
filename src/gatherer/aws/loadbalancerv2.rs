@@ -13,7 +13,7 @@ use crate::gatherer::aws::shared_types::{Collector, DefaultCollector, Hypershift
 use crate::gatherer::Gatherer;
 use crate::types::MinimalClusterInfo;
 
-use super::shared_types::AWSLoadBalancer;
+use ::shared_types::AWSLoadBalancer;
 
 pub struct LoadBalancerGatherer<'a> {
     pub client: &'a ELBv2Client,

@@ -5,6 +5,7 @@ pub mod shared_types;
 
 pub use crate::gatherer::aws::loadbalancer::get_classic_load_balancers;
 use crate::types::MinimalClusterInfo;
+use ::shared_types::{AWSLoadBalancer, Subnet};
 
 use crate::gatherer::Gatherer;
 use aws_config::meta::region::RegionProviderChain;
@@ -20,10 +21,7 @@ use hyper_proxy::{Intercept, Proxy, ProxyConnector};
 use log::debug;
 use log::error;
 use log::info;
-use serde::{Deserialize, Serialize};
 use url::Url;
-
-use self::shared_types::Subnet;
 
 /// Struct that holds all data available in AWS once we gathered it.
 pub struct AWSClusterData {
@@ -115,17 +113,15 @@ pub async fn gather(cluster_info: &MinimalClusterInfo) -> AWSClusterData {
                     .expect("could not retrieve classic load balancers");
             let ec2_client = ec2_client.clone();
             let lbs = lbs.clone();
-            let mut mlbs: Vec<crate::gatherer::aws::shared_types::AWSLoadBalancer> = lbs
+            let mut mlbs: Vec<AWSLoadBalancer> = lbs
                 .clone()
                 .into_iter()
-                .map(|l| crate::gatherer::aws::shared_types::AWSLoadBalancer::ModernLoadBalancer(l))
+                .map(|l| AWSLoadBalancer::ModernLoadBalancer(l))
                 .collect();
-            let mut clbs: Vec<crate::gatherer::aws::shared_types::AWSLoadBalancer> = classic_lbs
+            let mut clbs: Vec<AWSLoadBalancer> = classic_lbs
                 .clone()
                 .into_iter()
-                .map(|l| {
-                    crate::gatherer::aws::shared_types::AWSLoadBalancer::ClassicLoadBalancer(l)
-                })
+                .map(|l| AWSLoadBalancer::ClassicLoadBalancer(l))
                 .collect();
             clbs.append(&mut mlbs);
             let enig = crate::gatherer::aws::ec2::NetworkInterfaceGatherer {
