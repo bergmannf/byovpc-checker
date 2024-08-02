@@ -9,4 +9,4 @@ serde = { version = "1.0.204", features = ["derive"] }
 serde_json = "1.0.122"
 
 [lib]
-crate_type = ["cdylib"]
+crate-type = ["cdylib"]
