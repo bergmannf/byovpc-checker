@@ -10,6 +10,8 @@ mod types;
 use aws_sdk_ec2::Error;
 use checks::network::ClusterNetwork;
 use clap::Parser;
+use extism::{Manifest, Plugin, Wasm};
+use serde::Serialize;
 use std::process::exit;
 use types::MinimalClusterInfo;
 
@@ -66,16 +68,16 @@ async fn main() -> Result<(), Error> {
 
     let aws_data = crate::gatherer::aws::gather(&cluster_info).await;
 
-    let cn = ClusterNetwork::new(
-        &cluster_info,
-        aws_data.subnets,
-        aws_data.routetables,
-        aws_data.load_balancers,
-        aws_data.load_balancer_enis,
-        aws_data.classic_load_balancers,
-    );
-    for res in cn.verify() {
-        println!("{}", res);
-    }
+    let extism_plugin =
+        Wasm::file("./subnet-checks/target/wasm32-unknown-unknown/debug/subnet_checks.wasm");
+    let manifest = Manifest::new([extism_plugin]);
+    let mut plugin = Plugin::new(&manifest, [], true).unwrap();
+
+    let result = plugin
+        .call::<String, String>("verify", serde_json::to_string(&aws_data.subnets).unwrap())
+        .unwrap();
+
+    println!("Call to WASM finished with: {}", result);
+
     Ok(())
 }

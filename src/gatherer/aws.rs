@@ -20,11 +20,14 @@ use hyper_proxy::{Intercept, Proxy, ProxyConnector};
 use log::debug;
 use log::error;
 use log::info;
+use serde::{Deserialize, Serialize};
 use url::Url;
+
+use self::shared_types::Subnet;
 
 /// Struct that holds all data available in AWS once we gathered it.
 pub struct AWSClusterData {
-    pub subnets: Vec<aws_sdk_ec2::types::Subnet>,
+    pub subnets: Vec<Subnet>,
     pub routetables: Vec<aws_sdk_ec2::types::RouteTable>,
     pub load_balancers: Vec<aws_sdk_elasticloadbalancingv2::types::LoadBalancer>,
     pub classic_load_balancers: Vec<aws_sdk_elasticloadbalancing::types::LoadBalancerDescription>,
@@ -182,7 +185,7 @@ pub async fn gather(cluster_info: &MinimalClusterInfo) -> AWSClusterData {
     let instances = h3.await.unwrap();
 
     AWSClusterData {
-        subnets,
+        subnets: subnets.iter().map(|s| Subnet::from(s.clone())).collect(),
         routetables,
         load_balancers,
         classic_load_balancers,
