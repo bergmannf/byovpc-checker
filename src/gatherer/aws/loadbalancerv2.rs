@@ -9,11 +9,10 @@ use aws_sdk_elasticloadbalancingv2::Client as ELBv2Client;
 use log::debug;
 use std::error::Error;
 
+use crate::gatherer::aws::conversion::AWSLoadBalancer;
 use crate::gatherer::aws::shared_types::{Collector, DefaultCollector, HypershiftCollector};
 use crate::gatherer::Gatherer;
 use crate::types::MinimalClusterInfo;
-
-use ::shared_types::AWSLoadBalancer;
 
 pub struct LoadBalancerGatherer<'a> {
     pub client: &'a ELBv2Client,

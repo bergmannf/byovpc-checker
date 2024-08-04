@@ -2648,9 +2648,6 @@ dependencies = [
 name = "shared-types"
 version = "0.1.0"
 dependencies = [
- "aws-sdk-ec2",
- "aws-sdk-elasticloadbalancing",
- "aws-sdk-elasticloadbalancingv2",
  "serde",
  "serde_json",
 ]

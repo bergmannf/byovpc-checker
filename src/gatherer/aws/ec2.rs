@@ -13,7 +13,7 @@ use crate::gatherer::Gatherer;
 use crate::types::{InvariantError, MinimalClusterInfo};
 
 use super::shared_types::CLUSTER_TAG_PREFIX;
-use ::shared_types::{AWSInstance, AWSLoadBalancer};
+use crate::gatherer::aws::conversion::{AWSInstance, AWSLoadBalancer};
 
 /// Retrieves the subnets
 /// This gatherer will retrieve:

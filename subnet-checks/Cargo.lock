@@ -313,6 +313,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "shared-types"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "smallvec"
 version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -325,6 +333,7 @@ dependencies = [
  "extism-pdk",
  "serde",
  "serde_json",
+ "shared-types",
 ]
 
 [[package]]

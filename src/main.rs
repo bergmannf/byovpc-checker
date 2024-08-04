@@ -73,8 +73,10 @@ async fn main() -> Result<(), Error> {
     let manifest = Manifest::new([extism_plugin]);
     let mut plugin = Plugin::new(&manifest, [], true).unwrap();
 
+    let subnets: Vec<::shared_types::Subnet> =
+        aws_data.subnets.iter().map(|s| (*s).clone()).collect();
     let result = plugin
-        .call::<String, String>("verify", serde_json::to_string(&aws_data.subnets).unwrap())
+        .call::<String, String>("verify", serde_json::to_string(&subnets).unwrap())
         .unwrap();
 
     println!("Call to WASM finished with: {}", result);

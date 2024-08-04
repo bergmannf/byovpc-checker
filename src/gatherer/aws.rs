@@ -1,17 +1,18 @@
+pub mod conversion;
 pub mod ec2;
 pub mod loadbalancer;
 pub mod loadbalancerv2;
 pub mod shared_types;
 
+use crate::gatherer::aws::conversion::{AWSLoadBalancer, SubnetProxy};
 pub use crate::gatherer::aws::loadbalancer::get_classic_load_balancers;
 use crate::types::MinimalClusterInfo;
-use ::shared_types::{AWSLoadBalancer, Subnet};
 
 use crate::gatherer::Gatherer;
 use aws_config::meta::region::RegionProviderChain;
 use aws_config::BehaviorVersion;
 use aws_config::SdkConfig;
-use aws_sdk_ec2::{Client as EC2Client, Error};
+use aws_sdk_ec2::Client as EC2Client;
 use aws_sdk_elasticloadbalancing::Client as ELBv1Client;
 use aws_sdk_elasticloadbalancingv2::Client as ELBv2Client;
 use headers::Authorization;
@@ -25,7 +26,7 @@ use url::Url;
 
 /// Struct that holds all data available in AWS once we gathered it.
 pub struct AWSClusterData {
-    pub subnets: Vec<Subnet>,
+    pub subnets: Vec<SubnetProxy>,
     pub routetables: Vec<aws_sdk_ec2::types::RouteTable>,
     pub load_balancers: Vec<aws_sdk_elasticloadbalancingv2::types::LoadBalancer>,
     pub classic_load_balancers: Vec<aws_sdk_elasticloadbalancing::types::LoadBalancerDescription>,
@@ -181,7 +182,10 @@ pub async fn gather(cluster_info: &MinimalClusterInfo) -> AWSClusterData {
     let instances = h3.await.unwrap();
 
     AWSClusterData {
-        subnets: subnets.iter().map(|s| Subnet::from(s.clone())).collect(),
+        subnets: subnets
+            .iter()
+            .map(|s| SubnetProxy::from(s.clone()))
+            .collect(),
         routetables,
         load_balancers,
         classic_load_balancers,
