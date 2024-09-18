@@ -308,6 +308,7 @@ mod tests {
             .subnet_id(subnet_id)
             .availability_zone(az)
             .set_tags(Some(tags))
+            .vpc_id("vpc-1")
             .build()
     }
 
@@ -352,6 +353,8 @@ mod tests {
     #[test]
     fn test_verify_number_of_subnets_success() {
         let subnet = aws_sdk_ec2::types::Subnet::builder()
+            .subnet_id("1")
+            .vpc_id("vpc-1")
             .availability_zone("us-east-1a")
             .build();
         let mci = MinimalClusterInfo {
@@ -372,10 +375,11 @@ mod tests {
     #[test]
     fn test_verify_number_of_subnets_fail() {
         let mut subnets = vec![];
-        for _ in 1..=3 {
+        for i in 1..=3 {
             subnets.push(
                 aws_sdk_ec2::types::Subnet::builder()
                     .vpc_id("vpc-1")
+                    .subnet_id(i.to_string())
                     .availability_zone("us-east-1a")
                     .build(),
             );
@@ -468,7 +472,7 @@ mod tests {
         );
         let mci = &MinimalClusterInfo {
             cluster_id: String::from(clusterid),
-            cluster_infra_name: String::from(""),
+            cluster_infra_name: String::from("1"),
             cluster_type: crate::types::ClusterType::Osd,
             cloud_provider: String::from(""),
             subnets: vec![public_subnet.subnet_id.clone().unwrap()],
