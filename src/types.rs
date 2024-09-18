@@ -35,7 +35,7 @@ pub enum ClusterType {
     Hypershift,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MinimalClusterInfo {
     pub cluster_id: String,
     pub cluster_infra_name: String,

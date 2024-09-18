@@ -17,8 +17,8 @@ use crate::types::Verifier;
 
 #[derive(Clone, Debug, clap::ValueEnum)]
 enum OutputFormat {
-    Text,
-    Json,
+    Checks,
+    Debug,
 }
 
 #[derive(Clone, Debug, clap::ValueEnum)]
@@ -38,7 +38,7 @@ struct Options {
     clusterid: String,
     #[command(flatten)]
     verbose: clap_verbosity_flag::Verbosity,
-    #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+    #[arg(short, long, value_enum, default_value_t = OutputFormat::Checks)]
     format: OutputFormat,
     #[arg(long, value_enum, default_values_t = vec![Check::All])]
     checks: Vec<Check>,
@@ -74,8 +74,15 @@ async fn main() -> Result<(), Error> {
         aws_data.load_balancer_enis,
         aws_data.classic_load_balancers,
     );
-    for res in cn.verify() {
-        println!("{}", res);
+    match options.format {
+        OutputFormat::Debug => {
+            println!("{}", &format!("{:#?}", cn))
+        }
+        OutputFormat::Checks => {
+            for res in cn.verify() {
+                println!("{}", res);
+            }
+        }
     }
     Ok(())
 }

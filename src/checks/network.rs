@@ -14,6 +14,7 @@ pub const PRIVATE_ELB_TAG: &str = "kubernetes.io/role/internal-elb";
 pub const PUBLIC_ELB_TAG: &str = "kubernetes.io/role/elb";
 pub const CLUSTER_TAG: &str = "kubernetes.io/cluster/";
 
+#[derive(Debug)]
 pub struct ClusterNetwork<'a> {
     cluster_info: &'a MinimalClusterInfo,
     all_subnets: Vec<aws_sdk_ec2::types::Subnet>,
