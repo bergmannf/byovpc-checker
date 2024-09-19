@@ -369,8 +369,17 @@ mod tests {
             cluster_type: crate::types::ClusterType::Osd,
             cloud_provider: String::from(""),
             subnets: vec![String::from(subnet.subnet_id.clone().unwrap())],
+            base_domain: None,
         };
-        let cn = ClusterNetwork::new(&mci, vec![subnet.clone()], vec![], vec![], vec![], vec![]);
+        let cn = ClusterNetwork::new(
+            &mci,
+            vec![subnet.clone()],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        );
         let result = cn.verify_number_of_subnets();
         assert_eq!(
             result,
@@ -397,8 +406,17 @@ mod tests {
             cluster_type: crate::types::ClusterType::Osd,
             cloud_provider: String::from(""),
             subnets: subnet_ids.collect(),
+            base_domain: None,
         };
-        let cn = ClusterNetwork::new(&mci, subnets.clone(), vec![], vec![], vec![], vec![]);
+        let cn = ClusterNetwork::new(
+            &mci,
+            subnets.clone(),
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        );
         let result = cn.verify_number_of_subnets();
         assert_eq!(
             result,
@@ -420,11 +438,13 @@ mod tests {
             cluster_type: crate::types::ClusterType::Osd,
             cloud_provider: String::from(""),
             subnets: vec![public_subnet.subnet_id.clone().unwrap()],
+            base_domain: None,
         };
         let cn = ClusterNetwork::new(
             &mci,
             vec![public_subnet.clone()],
             vec![public_rtb.clone()],
+            vec![],
             vec![],
             vec![],
             vec![],
@@ -453,11 +473,13 @@ mod tests {
             cluster_type: crate::types::ClusterType::Osd,
             cloud_provider: String::from(""),
             subnets: vec![public_subnet.subnet_id.clone().unwrap()],
+            base_domain: None,
         };
         let cn = ClusterNetwork::new(
             &mci,
             vec![public_subnet.clone()],
             vec![public_rtb.clone()],
+            vec![],
             vec![],
             vec![],
             vec![],
@@ -482,11 +504,13 @@ mod tests {
             cluster_type: crate::types::ClusterType::Osd,
             cloud_provider: String::from(""),
             subnets: vec![public_subnet.subnet_id.clone().unwrap()],
+            base_domain: None,
         };
         let cn = ClusterNetwork::new(
             &mci,
             vec![public_subnet.clone()],
             vec![public_rtb.clone()],
+            vec![],
             vec![],
             vec![],
             vec![],
