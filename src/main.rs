@@ -73,6 +73,7 @@ async fn main() -> Result<(), Error> {
         aws_data.load_balancers,
         aws_data.load_balancer_enis,
         aws_data.classic_load_balancers,
+        aws_data.hosted_zones,
     );
     match options.format {
         OutputFormat::Debug => {

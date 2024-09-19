@@ -230,6 +230,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "aws-sdk-route53"
+version = "1.46.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "166797e8ac4c96b4e2db362b98c6e2b076914592da67f77990c380c453fc4eb9"
+dependencies = [
+ "aws-credential-types",
+ "aws-runtime",
+ "aws-smithy-async",
+ "aws-smithy-http",
+ "aws-smithy-json",
+ "aws-smithy-runtime",
+ "aws-smithy-runtime-api",
+ "aws-smithy-types",
+ "aws-smithy-xml",
+ "aws-types",
+ "http 0.2.12",
+ "once_cell",
+ "regex-lite",
+ "tracing",
+]
+
+[[package]]
 name = "aws-sdk-sso"
 version = "1.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -517,6 +539,7 @@ dependencies = [
  "aws-sdk-ec2",
  "aws-sdk-elasticloadbalancing",
  "aws-sdk-elasticloadbalancingv2",
+ "aws-sdk-route53",
  "aws-smithy-runtime",
  "clap",
  "clap-verbosity-flag",

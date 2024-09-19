@@ -42,6 +42,7 @@ pub struct MinimalClusterInfo {
     pub cluster_type: ClusterType,
     pub cloud_provider: String,
     pub subnets: Vec<String>,
+    pub base_domain: Option<String>,
 }
 
 impl MinimalClusterInfo {
@@ -102,6 +103,7 @@ impl MinimalClusterInfo {
                 .unwrap()
                 .to_string(),
             subnets,
+            base_domain: MinimalClusterInfo::base_domain(&cluster_json),
         }
     }
 
@@ -125,6 +127,22 @@ impl MinimalClusterInfo {
             }
         }
         return None;
+    }
+
+    fn base_domain(cluster_json: &serde_json::Value) -> Option<String> {
+        let console_url = cluster_json
+            .get("console")
+            .and_then(|v| v.get("url"))
+            .and_then(|v| v.as_str());
+        console_url.map_or_else(
+            || None,
+            |s| {
+                let parts: Vec<&str> = s.split_terminator(".").collect();
+                // FIXME: Hard coded stripping of parts from the URL is not nice
+                let base_domain = parts[3..].join(".");
+                Some(base_domain)
+            },
+        )
     }
 }
 

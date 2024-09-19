@@ -4,7 +4,10 @@
 //! - Number of subnets in the VPC matches expectation (2 subnets per AZ)
 //! - The subnets in the VPC have the expected tags.
 
-use crate::types::{ClusterType, MinimalClusterInfo, VerificationResult, Verifier};
+use crate::{
+    gatherer::aws::shared_types::HostedZoneWithRecords,
+    types::{ClusterType, MinimalClusterInfo, VerificationResult, Verifier},
+};
 use aws_sdk_ec2::types::Subnet;
 use log::{debug, info};
 
@@ -23,6 +26,7 @@ pub struct ClusterNetwork<'a> {
     load_balancers: Vec<aws_sdk_elasticloadbalancingv2::types::LoadBalancer>,
     load_balancer_enis: Vec<aws_sdk_ec2::types::NetworkInterface>,
     classic_load_balancers: Vec<aws_sdk_elasticloadbalancing::types::LoadBalancerDescription>,
+    hosted_zones: Vec<HostedZoneWithRecords>,
 }
 
 impl<'a> ClusterNetwork<'a> {
@@ -33,6 +37,7 @@ impl<'a> ClusterNetwork<'a> {
         load_balancers: Vec<aws_sdk_elasticloadbalancingv2::types::LoadBalancer>,
         load_balancer_enis: Vec<aws_sdk_ec2::types::NetworkInterface>,
         classic_load_balancers: Vec<aws_sdk_elasticloadbalancing::types::LoadBalancerDescription>,
+        hosted_zones: Vec<HostedZoneWithRecords>,
     ) -> ClusterNetwork<'a> {
         let mut subnet_to_routetables: HashMap<String, aws_sdk_ec2::types::RouteTable> =
             HashMap::new();
@@ -58,6 +63,7 @@ impl<'a> ClusterNetwork<'a> {
             load_balancers,
             load_balancer_enis,
             classic_load_balancers,
+            hosted_zones,
         }
     }
 

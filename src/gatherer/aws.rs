@@ -1,3 +1,4 @@
+pub mod dns;
 pub mod ec2;
 pub mod loadbalancer;
 pub mod loadbalancerv2;
@@ -10,9 +11,10 @@ use crate::gatherer::Gatherer;
 use aws_config::meta::region::RegionProviderChain;
 use aws_config::BehaviorVersion;
 use aws_config::SdkConfig;
-use aws_sdk_ec2::{Client as EC2Client, Error};
+use aws_sdk_ec2::Client as EC2Client;
 use aws_sdk_elasticloadbalancing::Client as ELBv1Client;
 use aws_sdk_elasticloadbalancingv2::Client as ELBv2Client;
+use aws_sdk_route53::Client as Route53Client;
 use headers::Authorization;
 use hyper::client::HttpConnector;
 use hyper::Uri;
@@ -20,6 +22,7 @@ use hyper_proxy::{Intercept, Proxy, ProxyConnector};
 use log::debug;
 use log::error;
 use log::info;
+use shared_types::HostedZoneWithRecords;
 use url::Url;
 
 /// Struct that holds all data available in AWS once we gathered it.
@@ -30,6 +33,7 @@ pub struct AWSClusterData {
     pub classic_load_balancers: Vec<aws_sdk_elasticloadbalancing::types::LoadBalancerDescription>,
     pub load_balancer_enis: Vec<aws_sdk_ec2::types::NetworkInterface>,
     pub instances: Vec<aws_sdk_ec2::types::Instance>,
+    pub hosted_zones: Vec<HostedZoneWithRecords>,
 }
 
 /// Returns `ProxyConnector<HttpConnector>` if env. variable 'https_proxy' is set
@@ -92,6 +96,7 @@ pub async fn gather(cluster_info: &MinimalClusterInfo) -> AWSClusterData {
     let ec2_client = EC2Client::new(&aws_config);
     let elbv2_client = ELBv2Client::new(&aws_config);
     let elbv1_client = ELBv1Client::new(&aws_config);
+    let route53_client = Route53Client::new(&aws_config);
 
     info!("Fetching LoadBalancer data");
     let h1 = tokio::spawn({
@@ -177,9 +182,32 @@ pub async fn gather(cluster_info: &MinimalClusterInfo) -> AWSClusterData {
         }
     });
 
+    info!("Fetching hostedzones");
+    let h4 = tokio::spawn({
+        let cluster_info = cluster_info.clone();
+        let route53_client = route53_client.clone();
+        async move {
+            let hosted_zones = crate::gatherer::aws::dns::HostedZoneGatherer {
+                client: &route53_client,
+                cluster_info: &cluster_info,
+            }
+            .gather()
+            .await
+            .expect("Could not retrieve hosted zones");
+            crate::gatherer::aws::dns::ResourceRecordGatherer {
+                client: &route53_client,
+                hosted_zones: &hosted_zones,
+            }
+            .gather()
+            .await
+            .expect("Could not retrieve resource records")
+        }
+    });
+
     let (load_balancers, classic_load_balancers, load_balancer_enis) = h1.await.unwrap();
     let (subnets, routetables) = h2.await.unwrap();
     let instances = h3.await.unwrap();
+    let hosted_zones = h4.await.unwrap();
 
     AWSClusterData {
         subnets,
@@ -188,5 +216,6 @@ pub async fn gather(cluster_info: &MinimalClusterInfo) -> AWSClusterData {
         classic_load_balancers,
         load_balancer_enis,
         instances,
+        hosted_zones,
     }
 }

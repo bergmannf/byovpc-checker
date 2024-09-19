@@ -10,7 +10,7 @@ use log::{debug, error, info};
 use std::error::Error;
 
 use crate::gatherer::Gatherer;
-use crate::types::{InvariantError, MinimalClusterInfo};
+use crate::types::MinimalClusterInfo;
 
 use super::shared_types::{AWSInstance, AWSLoadBalancer, CLUSTER_TAG_PREFIX};
 
