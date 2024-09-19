@@ -5,7 +5,6 @@ use aws_sdk_elasticloadbalancing::types::Tag as TagV1;
 use aws_sdk_elasticloadbalancingv2::types::LoadBalancer;
 use aws_sdk_elasticloadbalancingv2::types::Tag as TagV2;
 use aws_sdk_route53::types::HostedZone;
-use aws_sdk_route53::types::ResourceRecord;
 use aws_sdk_route53::types::ResourceRecordSet;
 use log::debug;
 
@@ -85,13 +84,13 @@ impl<'a> Collector for DefaultCollector<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct AWSInstance {
     pub instance: Instance,
     pub security_groups: Vec<SecurityGroup>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct HostedZoneWithRecords {
     pub hosted_zone: HostedZone,
     pub resource_records: Vec<ResourceRecordSet>,

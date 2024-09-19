@@ -2,7 +2,7 @@ use std::error::Error;
 
 use async_trait::async_trait;
 use aws_sdk_route53::{
-    types::{HostedZone, ResourceRecord},
+    types::HostedZone,
     Client,
 };
 use log::{debug, error};

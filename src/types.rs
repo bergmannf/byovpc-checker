@@ -1,6 +1,7 @@
 //! Shared types that are used throughout the application.
 
 use colored::Colorize;
+use derive_builder::Builder;
 use log::{debug, warn};
 use std::{error::Error, fmt::Display, process::Command};
 
@@ -35,13 +36,18 @@ pub enum ClusterType {
     Hypershift,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Builder, Clone, Debug)]
 pub struct MinimalClusterInfo {
     pub cluster_id: String,
+    #[builder(default = "\"\".to_string()")]
     pub cluster_infra_name: String,
+    #[builder(default = "ClusterType::Osd")]
     pub cluster_type: ClusterType,
+    #[builder(default = "\"AWS\".to_string()")]
     pub cloud_provider: String,
+    #[builder(default = "vec![]")]
     pub subnets: Vec<String>,
+    #[builder(default = "None")]
     pub base_domain: Option<String>,
 }
 
