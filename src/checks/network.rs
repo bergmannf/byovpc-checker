@@ -25,7 +25,7 @@ pub struct ClusterNetwork<'a> {
     all_subnets: Vec<aws_sdk_ec2::types::Subnet>,
     #[builder(default = "vec![]")]
     routetables: Vec<aws_sdk_ec2::types::RouteTable>,
-    #[builder(default = "HashMap::new()")]
+    #[builder(default = "self.derive_subnet_routetable_mapping()")]
     subnet_routetable_mapping: HashMap<String, aws_sdk_ec2::types::RouteTable>,
     #[builder(default = "vec![]")]
     load_balancers: Vec<aws_sdk_elasticloadbalancingv2::types::LoadBalancer>,
@@ -37,20 +37,18 @@ pub struct ClusterNetwork<'a> {
     hosted_zones: Vec<HostedZoneWithRecords>,
 }
 
-impl<'a> ClusterNetwork<'a> {
-    pub fn new(
-        cluster_info: &'a MinimalClusterInfo,
-        all_subnets: Vec<aws_sdk_ec2::types::Subnet>,
-        routetables: Vec<aws_sdk_ec2::types::RouteTable>,
-        load_balancers: Vec<aws_sdk_elasticloadbalancingv2::types::LoadBalancer>,
-        load_balancer_enis: Vec<aws_sdk_ec2::types::NetworkInterface>,
-        classic_load_balancers: Vec<aws_sdk_elasticloadbalancing::types::LoadBalancerDescription>,
-        hosted_zones: Vec<HostedZoneWithRecords>,
-    ) -> ClusterNetwork<'a> {
+impl<'a> ClusterNetworkBuilder<'a> {
+    fn derive_subnet_routetable_mapping(&self) -> HashMap<String, aws_sdk_ec2::types::RouteTable> {
+        if self.all_subnets.is_none() || self.routetables.is_none() {
+            return HashMap::new();
+        }
         let mut subnet_to_routetables: HashMap<String, aws_sdk_ec2::types::RouteTable> =
             HashMap::new();
-        for subnet in all_subnets.iter() {
-            let rtb: Vec<&aws_sdk_ec2::types::RouteTable> = routetables
+        for subnet in self.all_subnets.as_ref().unwrap().iter() {
+            let rtb: Vec<&aws_sdk_ec2::types::RouteTable> = self
+                .routetables
+                .as_ref()
+                .unwrap()
                 .iter()
                 .filter(|rtb| {
                     rtb.associations
@@ -63,18 +61,11 @@ impl<'a> ClusterNetwork<'a> {
                 subnet_to_routetables.insert(subnet.subnet_id.clone().unwrap(), drt);
             }
         }
-        ClusterNetwork {
-            cluster_info,
-            all_subnets,
-            routetables,
-            subnet_routetable_mapping: subnet_to_routetables,
-            load_balancers,
-            load_balancer_enis,
-            classic_load_balancers,
-            hosted_zones,
-        }
+        subnet_to_routetables
     }
+}
 
+impl<'a> ClusterNetwork<'a> {
     fn configured_subnets(&self) -> Vec<Subnet> {
         let mut configured_subnets = vec![];
         for subnet in self.all_subnets.iter() {
@@ -432,12 +423,14 @@ mod tests {
         let clusterid = "1";
         let (public_subnet, public_rtb) =
             make_public_subnet("1", "us-east-1a", &HashMap::from([(PUBLIC_ELB_TAG, "1")]));
-        let mci = MinimalClusterInfoBuilder::default()
+        let mut mcib = MinimalClusterInfoBuilder::default();
+        let mci = mcib
             .cluster_id(clusterid.to_string())
             .subnets(vec![public_subnet.subnet_id.clone().unwrap()])
             .build()
             .unwrap();
-        let cn = ClusterNetworkBuilder::default()
+        let mut cnb = ClusterNetworkBuilder::default();
+        let cn = cnb
             .cluster_info(&mci)
             .all_subnets(vec![public_subnet.clone()])
             .routetables(vec![public_rtb.clone()])
@@ -461,12 +454,14 @@ mod tests {
                 (&format!("{}{}", CLUSTER_TAG_PREFIX, "2"), "shared"),
             ]),
         );
-        let mci = MinimalClusterInfoBuilder::default()
+        let mut mcib = MinimalClusterInfoBuilder::default();
+        let mci = mcib
             .cluster_id(clusterid.to_string())
             .subnets(vec![public_subnet.subnet_id.clone().unwrap()])
             .build()
             .unwrap();
-        let cn = ClusterNetworkBuilder::default()
+        let mut cnb = ClusterNetworkBuilder::default();
+        let cn = cnb
             .cluster_info(&mci)
             .all_subnets(vec![public_subnet.clone()])
             .routetables(vec![public_rtb.clone()])
@@ -490,13 +485,15 @@ mod tests {
                 (&format!("{}{}", CLUSTER_TAG_PREFIX, "2"), "owned"),
             ]),
         );
-        let mci = MinimalClusterInfoBuilder::default()
+        let mut mcib = MinimalClusterInfoBuilder::default();
+        let mci = mcib
             .cluster_id(clusterid.to_string())
             .cluster_infra_name("1".to_string())
             .subnets(vec![public_subnet.subnet_id.clone().unwrap()])
             .build()
             .unwrap();
-        let cn = ClusterNetworkBuilder::default()
+        let mut cnb = ClusterNetworkBuilder::default();
+        let cn = cnb
             .cluster_info(&mci)
             .all_subnets(vec![public_subnet.clone()])
             .routetables(vec![public_rtb.clone()])
@@ -510,5 +507,31 @@ mod tests {
                 "kubernetes.io/cluster/2".to_string()
             )
         )
+    }
+
+    #[test]
+    fn test_verify_builder_sets_subnet_rtb_mapping() {
+        let (public_subnet, public_rtb) = make_public_subnet(
+            "1",
+            "us-east-1a",
+            &HashMap::from([
+                (PUBLIC_ELB_TAG, "1"),
+                (&format!("{}{}", CLUSTER_TAG_PREFIX, "2"), "shared"),
+            ]),
+        );
+        let mut mcib = MinimalClusterInfoBuilder::default();
+        let mci = mcib
+            .cluster_id("1".to_string())
+            .subnets(vec![public_subnet.subnet_id.clone().unwrap()])
+            .build()
+            .unwrap();
+        let mut cnb = ClusterNetworkBuilder::default();
+        let cn = cnb
+            .cluster_info(&mci)
+            .all_subnets(vec![public_subnet.clone()])
+            .routetables(vec![public_rtb.clone()])
+            .build()
+            .unwrap();
+        assert_eq!(cn.subnet_routetable_mapping.len(), 1)
     }
 }

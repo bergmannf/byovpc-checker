@@ -8,7 +8,7 @@ mod gatherer;
 mod types;
 
 use aws_sdk_ec2::Error;
-use checks::network::ClusterNetwork;
+use checks::network::{ClusterNetwork, ClusterNetworkBuilder};
 use clap::Parser;
 use std::process::exit;
 use types::MinimalClusterInfo;
@@ -66,15 +66,17 @@ async fn main() -> Result<(), Error> {
 
     let aws_data = crate::gatherer::aws::gather(&cluster_info).await;
 
-    let cn = ClusterNetwork::new(
-        &cluster_info,
-        aws_data.subnets,
-        aws_data.routetables,
-        aws_data.load_balancers,
-        aws_data.load_balancer_enis,
-        aws_data.classic_load_balancers,
-        aws_data.hosted_zones,
-    );
+    let mut cnb = ClusterNetworkBuilder::default();
+    let cn = cnb
+        .cluster_info(&cluster_info)
+        .all_subnets(aws_data.subnets)
+        .routetables(aws_data.routetables)
+        .load_balancers(aws_data.load_balancers)
+        .load_balancer_enis(aws_data.load_balancer_enis)
+        .classic_load_balancers(aws_data.classic_load_balancers)
+        .hosted_zones(aws_data.hosted_zones)
+        .build()
+        .unwrap();
     match options.format {
         OutputFormat::Debug => {
             println!("{}", &format!("{:#?}", cn))
