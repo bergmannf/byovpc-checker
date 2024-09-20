@@ -7,4 +7,5 @@
 //! Planned checks:
 //! - Compare LB setup to configured subnets.
 
+pub mod dns;
 pub mod network;

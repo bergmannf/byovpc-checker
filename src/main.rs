@@ -80,7 +80,8 @@ async fn main() -> Result<(), Error> {
         .build()
         .unwrap();
     let mut hzb = HostedZoneChecksBuilder::default();
-    hzb.hosted_zones(aws_data.hosted_zones.clone())
+    let hz = hzb
+        .hosted_zones(aws_data.hosted_zones.clone())
         .load_balancers(aws_data.load_balancers.clone())
         .build()
         .unwrap();
@@ -90,6 +91,9 @@ async fn main() -> Result<(), Error> {
         }
         OutputFormat::Checks => {
             for res in cn.verify() {
+                println!("{}", res);
+            }
+            for res in hz.verify() {
                 println!("{}", res);
             }
         }

@@ -163,6 +163,8 @@ pub enum VerificationResult {
     SubnetMissingPrivateElbTag(String),
     SubnetMissingPublicElbTag(String),
     LoadBalancerIncorrectSubnet(String, String, String),
+    HostedZoneTooFew(String),
+    HostedZoneTooMany(String),
 }
 
 impl Display for VerificationResult {
@@ -226,6 +228,16 @@ impl Display for VerificationResult {
                     az.blue()
                 ))
             }
+            Self::HostedZoneTooFew(msg) => f.write_str(&format!(
+                "{} Too few hosted zones found in account: {}",
+                "".yellow(),
+                msg.yellow()
+            )),
+            Self::HostedZoneTooMany(msg) => f.write_str(&format!(
+                "{} Too many hosted zones found in account: {}",
+                "".yellow(),
+                msg.yellow()
+            )),
         }
     }
 }
