@@ -15,7 +15,7 @@ pub const CLUSTER_TAG_PREFIX: &str = "kubernetes.io/cluster/";
 
 // Abstracts over classic and modern loadbalancers where needed.
 // Allows the method to dispatch using match where needed.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum AWSLoadBalancer {
     ClassicLoadBalancer(LoadBalancerDescription),
     ModernLoadBalancer(LoadBalancer),

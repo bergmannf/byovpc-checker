@@ -22,6 +22,7 @@ use hyper_proxy::{Intercept, Proxy, ProxyConnector};
 use log::debug;
 use log::error;
 use log::info;
+use shared_types::AWSLoadBalancer;
 use shared_types::HostedZoneWithRecords;
 use url::Url;
 
@@ -29,8 +30,7 @@ use url::Url;
 pub struct AWSClusterData {
     pub subnets: Vec<aws_sdk_ec2::types::Subnet>,
     pub routetables: Vec<aws_sdk_ec2::types::RouteTable>,
-    pub load_balancers: Vec<aws_sdk_elasticloadbalancingv2::types::LoadBalancer>,
-    pub classic_load_balancers: Vec<aws_sdk_elasticloadbalancing::types::LoadBalancerDescription>,
+    pub load_balancers: Vec<AWSLoadBalancer>,
     pub load_balancer_enis: Vec<aws_sdk_ec2::types::NetworkInterface>,
     pub instances: Vec<aws_sdk_ec2::types::Instance>,
     pub hosted_zones: Vec<HostedZoneWithRecords>,
@@ -135,7 +135,7 @@ pub async fn gather(cluster_info: &MinimalClusterInfo) -> AWSClusterData {
                 loadbalancers: &clbs,
             };
             let eni_lbs = enig.gather().await.expect("could not retrieve ENIs");
-            (lbs, classic_lbs, eni_lbs)
+            (clbs, eni_lbs)
         }
     });
 
@@ -204,7 +204,7 @@ pub async fn gather(cluster_info: &MinimalClusterInfo) -> AWSClusterData {
         }
     });
 
-    let (load_balancers, classic_load_balancers, load_balancer_enis) = h1.await.unwrap();
+    let (load_balancers, load_balancer_enis) = h1.await.unwrap();
     let (subnets, routetables) = h2.await.unwrap();
     let instances = h3.await.unwrap();
     let hosted_zones = h4.await.unwrap();
@@ -213,7 +213,6 @@ pub async fn gather(cluster_info: &MinimalClusterInfo) -> AWSClusterData {
         subnets,
         routetables,
         load_balancers,
-        classic_load_balancers,
         load_balancer_enis,
         instances,
         hosted_zones,

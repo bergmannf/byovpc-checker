@@ -8,7 +8,10 @@ mod gatherer;
 mod types;
 
 use aws_sdk_ec2::Error;
-use checks::network::{ClusterNetwork, ClusterNetworkBuilder};
+use checks::{
+    dns::HostedZoneChecksBuilder,
+    network::{ClusterNetwork, ClusterNetworkBuilder},
+};
 use clap::Parser;
 use std::process::exit;
 use types::MinimalClusterInfo;
@@ -71,10 +74,14 @@ async fn main() -> Result<(), Error> {
         .cluster_info(&cluster_info)
         .all_subnets(aws_data.subnets)
         .routetables(aws_data.routetables)
-        .load_balancers(aws_data.load_balancers)
+        .load_balancers(aws_data.load_balancers.clone())
         .load_balancer_enis(aws_data.load_balancer_enis)
-        .classic_load_balancers(aws_data.classic_load_balancers)
-        .hosted_zones(aws_data.hosted_zones)
+        .hosted_zones(aws_data.hosted_zones.clone())
+        .build()
+        .unwrap();
+    let mut hzb = HostedZoneChecksBuilder::default();
+    hzb.hosted_zones(aws_data.hosted_zones.clone())
+        .load_balancers(aws_data.load_balancers.clone())
         .build()
         .unwrap();
     match options.format {

@@ -5,7 +5,7 @@
 //! - The subnets in the VPC have the expected tags.
 
 use crate::{
-    gatherer::aws::shared_types::HostedZoneWithRecords,
+    gatherer::aws::shared_types::{AWSLoadBalancer, HostedZoneWithRecords},
     types::{MinimalClusterInfo, VerificationResult, Verifier},
 };
 use aws_sdk_ec2::types::Subnet;
@@ -28,11 +28,9 @@ pub struct ClusterNetwork<'a> {
     #[builder(default = "self.derive_subnet_routetable_mapping()")]
     subnet_routetable_mapping: HashMap<String, aws_sdk_ec2::types::RouteTable>,
     #[builder(default = "vec![]")]
-    load_balancers: Vec<aws_sdk_elasticloadbalancingv2::types::LoadBalancer>,
+    load_balancers: Vec<AWSLoadBalancer>,
     #[builder(default = "vec![]")]
     load_balancer_enis: Vec<aws_sdk_ec2::types::NetworkInterface>,
-    #[builder(default = "vec![]")]
-    classic_load_balancers: Vec<aws_sdk_elasticloadbalancing::types::LoadBalancerDescription>,
     #[builder(default = "vec![]")]
     hosted_zones: Vec<HostedZoneWithRecords>,
 }
@@ -257,7 +255,11 @@ impl<'a> ClusterNetwork<'a> {
             .iter()
             .map(|s| s.subnet_id().unwrap())
             .collect();
-        for lb in self.load_balancers.iter() {
+        for alb in self.load_balancers.iter() {
+            // FIXME: This check should (partially) work for CLBs as well
+            let AWSLoadBalancer::ModernLoadBalancer(lb) = alb else {
+                continue;
+            };
             for az in lb.availability_zones() {
                 let sid = az.subnet_id().unwrap();
                 if !configured_subnet_ids.contains(sid) {
