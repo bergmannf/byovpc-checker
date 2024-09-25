@@ -411,7 +411,10 @@ mod tests {
         let result = cn.verify_number_of_subnets();
         assert_eq!(
             result,
-            VerificationResult::Success("All AZs have the expected number of subnets".to_string())
+            VerificationResult {
+                message: "All AZs have the expected number of subnets".to_string(),
+                severity: crate::types::Severity::Ok,
+            }
         )
     }
 
@@ -443,10 +446,11 @@ mod tests {
         let result = cn.verify_number_of_subnets();
         assert_eq!(
             result,
-            VerificationResult::SubnetTooManyPerAZ(vec![(
-                ("vpc-1".to_string(), "us-east-1a".to_string()),
-                3
-            )])
+            VerificationResult {
+                message: "There are too many subnets in the follow AZs: AZ vpc-1 (VPC: us-east-1a)"
+                    .to_string(),
+                severity: crate::types::Severity::Ok,
+            }
         )
     }
 
@@ -471,7 +475,10 @@ mod tests {
         let results = cn.verify_subnet_tags();
         assert_eq!(
             results[0],
-            VerificationResult::SubnetMissingClusterTag("1".to_string())
+            VerificationResult {
+                message: "Subnet 1 is missing cluster tag: kubernetes.io/cluster/".to_string(),
+                severity: crate::types::Severity::Info
+            }
         )
     }
 
@@ -502,7 +509,7 @@ mod tests {
         let results = cn.verify_subnet_tags();
         assert_eq!(
             results[0],
-            VerificationResult::Success("Subnet 1 seems correctly setup.".to_string())
+            VerificationResult { message: "Subnet 1 is correctly setup: tags are present and correct number of subnets per AZ found.".to_string(), severity: crate::types::Severity::Ok }
         )
     }
 
@@ -534,10 +541,11 @@ mod tests {
         let results = cn.verify_subnet_tags();
         assert_eq!(
             results[0],
-            VerificationResult::SubnetIncorrectClusterTag(
-                public_subnet.subnet_id.unwrap(),
-                "kubernetes.io/cluster/2".to_string()
-            )
+            VerificationResult {
+                message: "Subnet 1 is using incorrect cluster tag: kubernetes.io/cluster/2"
+                    .to_string(),
+                severity: crate::types::Severity::Critical,
+            }
         )
     }
 
