@@ -14,6 +14,7 @@ use aws_config::SdkConfig;
 use aws_sdk_ec2::Client as EC2Client;
 use aws_sdk_elasticloadbalancing::Client as ELBv1Client;
 use aws_sdk_elasticloadbalancingv2::Client as ELBv2Client;
+use aws_sdk_route53::types::HostedZone;
 use aws_sdk_route53::Client as Route53Client;
 use headers::Authorization;
 use hyper::client::HttpConnector;
@@ -193,7 +194,8 @@ pub async fn gather(cluster_info: &MinimalClusterInfo) -> AWSClusterData {
             }
             .gather()
             .await
-            .expect("Could not retrieve hosted zones");
+            .or::<Vec<HostedZone>>(Ok(vec![]))
+            .unwrap();
             crate::gatherer::aws::dns::ResourceRecordGatherer {
                 client: &route53_client,
                 hosted_zones: &hosted_zones,

@@ -137,16 +137,19 @@ impl MinimalClusterInfo {
 
     fn base_domain(cluster_json: &serde_json::Value) -> Option<String> {
         let console_url = cluster_json
-            .get("console")
+            .get("api")
             .and_then(|v| v.get("url"))
             .and_then(|v| v.as_str());
         console_url.map_or_else(
             || None,
             |s| {
-                let parts: Vec<&str> = s.split_terminator(".").collect();
+                let without_port: Vec<&str> = s.split_terminator(":").collect();
+                assert_eq!(without_port.len(), 3);
+                let parts: Vec<&str> = without_port[1].split_terminator(".").collect();
+                let bd = parts[2..].join(".");
+                debug!("Base Domain calculated as: {}", bd);
                 // FIXME: Hard coded stripping of parts from the URL is not nice
-                let base_domain = parts[3..].join(".");
-                Some(base_domain)
+                Some(bd)
             },
         )
     }
@@ -163,6 +166,7 @@ pub enum VerificationResult {
     SubnetMissingPrivateElbTag(String),
     SubnetMissingPublicElbTag(String),
     LoadBalancerIncorrectSubnet(String, String, String),
+    LoadBalancerUnused(String),
     HostedZoneTooFew(String),
     HostedZoneTooMany(String),
 }
@@ -170,10 +174,8 @@ pub enum VerificationResult {
 impl Display for VerificationResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            VerificationResult::Success(msg) => {
-                f.write_str(&format!("{} {}", "".green(), msg.green()))
-            }
-            VerificationResult::SubnetTooManyPerAZ(azs) => {
+            Self::Success(msg) => f.write_str(&format!("{} {}", "".green(), msg.green())),
+            Self::SubnetTooManyPerAZ(azs) => {
                 let messages: Vec<String> = azs
                     .iter()
                     .map(|a| {
@@ -189,44 +191,45 @@ impl Display for VerificationResult {
                     .collect();
                 f.write_str(&messages.join("\n"))
             }
-            VerificationResult::SubnetMissingClusterTag(subnet) => f.write_str(&format!(
+            Self::SubnetMissingClusterTag(subnet) => f.write_str(&format!(
                 "{} Subnet {} is {}",
                 "".yellow(),
                 subnet.blue(),
                 "missing a cluster tag".red()
             )),
-            VerificationResult::SubnetIncorrectClusterTag(subnet, tag) => f.write_str(&format!(
+            Self::SubnetIncorrectClusterTag(subnet, tag) => f.write_str(&format!(
                 "{} Subnet {} has a non-shared cluster tag of a different cluster: {}",
                 "".yellow(),
                 subnet.blue(),
                 tag.red()
             )),
-            VerificationResult::SubnetMissingPrivateElbTag(subnet) => f.write_str(&format!(
+            Self::SubnetMissingPrivateElbTag(subnet) => f.write_str(&format!(
                 "{} Subnet {} is {}: {}",
                 "".yellow(),
                 subnet.blue(),
                 "missing private-elb tag".yellow(),
                 crate::checks::network::PRIVATE_ELB_TAG.yellow()
             )),
-            VerificationResult::SubnetMissingPublicElbTag(subnet) => f.write_str(&format!(
+            Self::SubnetMissingPublicElbTag(subnet) => f.write_str(&format!(
                 "{} Subnet {} is {}: {}",
                 "".yellow(),
                 subnet.blue(),
                 "missing public-elb tag".yellow(),
                 crate::checks::network::PUBLIC_ELB_TAG.yellow()
             )),
-            VerificationResult::LoadBalancerIncorrectSubnet(lb, az, subnet) => {
-                f.write_str(&format!(
-                    "{} LoadBalancer {} is {} in AZ {}",
-                    "".yellow(),
-                    lb.blue(),
-                    format!(
-                        "using a subnet ({}) not configured for this cluster",
-                        subnet
-                    )
-                    .red(),
-                    az.blue()
-                ))
+            Self::LoadBalancerIncorrectSubnet(lb, az, subnet) => f.write_str(&format!(
+                "{} LoadBalancer {} is {} in AZ {}",
+                "".yellow(),
+                lb.blue(),
+                format!(
+                    "using a subnet ({}) not configured for this cluster",
+                    subnet
+                )
+                .red(),
+                az.blue()
+            )),
+            Self::LoadBalancerUnused(msg) => {
+                f.write_str(&format!("{} {}", "".yellow(), msg.yellow()))
             }
             Self::HostedZoneTooFew(msg) => f.write_str(&format!(
                 "{} Too few hosted zones found in account: {}",
