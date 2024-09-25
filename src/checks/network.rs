@@ -142,9 +142,22 @@ impl<'a> ClusterNetwork<'a> {
             }
         }
         if problematic_azs.len() == 0 {
-            VerificationResult::Success("All AZs have the expected number of subnets".to_string())
+            VerificationResult {
+                message: "All AZs have the expected number of subnets".to_string(),
+                severity: crate::types::Severity::Ok,
+            }
         } else {
-            VerificationResult::SubnetTooManyPerAZ(problematic_azs)
+            let msg: Vec<String> = problematic_azs
+                .iter()
+                .map(|a| format!("AZ {} (VPC: {})", a.0 .0, a.0 .1))
+                .collect();
+            VerificationResult {
+                message: format!(
+                    "There are too many subnets in the follow AZs: {}",
+                    msg.join(", ")
+                ),
+                severity: crate::types::Severity::Ok,
+            }
         }
     }
 
@@ -193,35 +206,46 @@ impl<'a> ClusterNetwork<'a> {
             }
             let has_incorrect_cluster_tag = incorrect_cluster_tag.len() > 0;
             if missing_cluster_tag {
-                verification_results.push(VerificationResult::SubnetMissingClusterTag(
-                    subnet_id.clone(),
-                ));
+                verification_results.push(VerificationResult {
+                    message: format!(
+                        "Subnet {} is missing cluster tag: {}",
+                        subnet_id.clone(),
+                        CLUSTER_TAG
+                    ),
+                    severity: crate::types::Severity::Info,
+                });
             }
             if has_incorrect_cluster_tag {
-                verification_results.push(VerificationResult::SubnetIncorrectClusterTag(
-                    subnet_id.clone(),
-                    incorrect_cluster_tag,
-                ));
+                verification_results.push(VerificationResult {
+                    message: format!(
+                        "Subnet {} is using incorrect cluster tag: {}",
+                        subnet_id.clone(),
+                        incorrect_cluster_tag
+                    ),
+                    severity: crate::types::Severity::Critical,
+                });
             }
             if missing_private_elb_tag {
-                verification_results.push(VerificationResult::SubnetMissingPrivateElbTag(
-                    subnet_id.clone(),
-                ));
+                verification_results.push(VerificationResult {
+                    message: format!("Subnet {} is missing private ELB tag", subnet_id.clone()),
+                    severity: crate::types::Severity::Info,
+                });
             }
             if missing_public_elb_tag {
-                verification_results.push(VerificationResult::SubnetMissingPublicElbTag(
-                    subnet_id.clone(),
-                ));
+                verification_results.push(VerificationResult {
+                    message: format!("Subnet {} is missing public ELB tag", subnet_id.clone()),
+                    severity: crate::types::Severity::Info,
+                });
             }
             if !missing_cluster_tag
                 && !has_incorrect_cluster_tag
                 && !missing_public_elb_tag
                 && !missing_private_elb_tag
             {
-                verification_results.push(VerificationResult::Success(format!(
-                    "Subnet {} seems correctly setup.",
-                    subnet_id
-                )))
+                verification_results.push(VerificationResult{
+                    message: format!("Subnet {} is correctly setup: tags are present and correct number of subnets per AZ found.", subnet_id),
+                    severity: crate::types::Severity::Ok,
+                })
             }
         }
         verification_results
@@ -231,9 +255,11 @@ impl<'a> ClusterNetwork<'a> {
     /// Only applicable for non-BYOVPC clusters
     pub fn verify_subnet_routetables(&self) -> Vec<VerificationResult> {
         if !self.cluster_info.subnets.is_empty() {
-            return vec![VerificationResult::Success(
-                "The cluster is BYOVPC - will not check routetables for subnets".to_string(),
-            )];
+            return vec![VerificationResult {
+                message: "The cluster is BYOVPC - will not check routetables for subnets"
+                    .to_string(),
+                severity: crate::types::Severity::Ok,
+            }];
         }
         vec![]
     }
@@ -245,9 +271,10 @@ impl<'a> ClusterNetwork<'a> {
         // If there are no configured subnets, the cluster is not BYOVPC, so
         // not checking if LBs are using those subnets.
         if self.cluster_info.subnets.is_empty() {
-            return vec![VerificationResult::Success(
-                "The cluster is not BYOVPC - will not check loadbalancers".to_string(),
-            )];
+            return vec![VerificationResult {
+                message: "The cluster is not BYOVPC - will not check loadbalancers".to_string(),
+                severity: crate::types::Severity::Ok,
+            }];
         }
         let mut verification_results = vec![];
         let configured_subnets = self.configured_subnets();
@@ -263,18 +290,21 @@ impl<'a> ClusterNetwork<'a> {
             for az in lb.availability_zones() {
                 let sid = az.subnet_id().unwrap();
                 if !configured_subnet_ids.contains(sid) {
-                    verification_results.push(VerificationResult::LoadBalancerIncorrectSubnet(
+                    verification_results.push(VerificationResult {
+                        message: format!("LoadBalancer {} is using subnet {} (AZ: {}) that is not configured for this cluster.",
                         lb.load_balancer_arn.as_ref().unwrap().clone(),
                         az.zone_name.as_ref().unwrap().to_string(),
-                        sid.to_string(),
-                    ))
+                        sid.to_string()),
+                        severity: crate::types::Severity::Warning,
+                    })
                 }
             }
         }
         if verification_results.len() == 0 {
-            verification_results.push(VerificationResult::Success(
-                "LoadBalancer subnet associations seem correct".to_string(),
-            ));
+            verification_results.push(VerificationResult {
+                message: "LoadBalancer subnet associations seem correct".to_string(),
+                severity: crate::types::Severity::Ok,
+            });
         }
         verification_results
     }

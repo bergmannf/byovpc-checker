@@ -155,92 +155,31 @@ impl MinimalClusterInfo {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum Severity {
+    Ok,
+    Info,
+    Warning,
+    Critical,
+}
+
 /// VerificationResult list all error conditions that can occur. These should be
 /// detailed enough to allow the user to fix the problem.
 #[derive(Debug, PartialEq, Eq)]
-pub enum VerificationResult {
-    Success(String),
-    SubnetTooManyPerAZ(Vec<((String, String), u8)>),
-    SubnetMissingClusterTag(String),
-    SubnetIncorrectClusterTag(String, String),
-    SubnetMissingPrivateElbTag(String),
-    SubnetMissingPublicElbTag(String),
-    LoadBalancerIncorrectSubnet(String, String, String),
-    LoadBalancerUnused(String),
-    HostedZoneTooFew(String),
-    HostedZoneTooMany(String),
+pub struct VerificationResult {
+    pub message: String,
+    pub severity: Severity,
 }
 
 impl Display for VerificationResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Success(msg) => f.write_str(&format!("{} {}", "".green(), msg.green())),
-            Self::SubnetTooManyPerAZ(azs) => {
-                let messages: Vec<String> = azs
-                    .iter()
-                    .map(|a| {
-                        format!(
-                            "{} AZ {} (vpc: {}) has {}: {}",
-                            "".red(),
-                            a.0 .1.blue(),
-                            a.0 .0.blue(),
-                            "too many subnets".red(),
-                            a.1
-                        )
-                    })
-                    .collect();
-                f.write_str(&messages.join("\n"))
+        match self.severity {
+            Severity::Ok => f.write_str(&(format!("{} {}", "Ⓞ -".green(), self.message.green()))),
+            Severity::Info => f.write_str(&format!("{} {}", "Ⓘ -".blue(), self.message.blue())),
+            Severity::Warning => {
+                f.write_str(&format!("{} {}", "Ⓦ -".yellow(), self.message.yellow()))
             }
-            Self::SubnetMissingClusterTag(subnet) => f.write_str(&format!(
-                "{} Subnet {} is {}",
-                "".yellow(),
-                subnet.blue(),
-                "missing a cluster tag".red()
-            )),
-            Self::SubnetIncorrectClusterTag(subnet, tag) => f.write_str(&format!(
-                "{} Subnet {} has a non-shared cluster tag of a different cluster: {}",
-                "".yellow(),
-                subnet.blue(),
-                tag.red()
-            )),
-            Self::SubnetMissingPrivateElbTag(subnet) => f.write_str(&format!(
-                "{} Subnet {} is {}: {}",
-                "".yellow(),
-                subnet.blue(),
-                "missing private-elb tag".yellow(),
-                crate::checks::network::PRIVATE_ELB_TAG.yellow()
-            )),
-            Self::SubnetMissingPublicElbTag(subnet) => f.write_str(&format!(
-                "{} Subnet {} is {}: {}",
-                "".yellow(),
-                subnet.blue(),
-                "missing public-elb tag".yellow(),
-                crate::checks::network::PUBLIC_ELB_TAG.yellow()
-            )),
-            Self::LoadBalancerIncorrectSubnet(lb, az, subnet) => f.write_str(&format!(
-                "{} LoadBalancer {} is {} in AZ {}",
-                "".yellow(),
-                lb.blue(),
-                format!(
-                    "using a subnet ({}) not configured for this cluster",
-                    subnet
-                )
-                .red(),
-                az.blue()
-            )),
-            Self::LoadBalancerUnused(msg) => {
-                f.write_str(&format!("{} {}", "".yellow(), msg.yellow()))
-            }
-            Self::HostedZoneTooFew(msg) => f.write_str(&format!(
-                "{} Too few hosted zones found in account: {}",
-                "".yellow(),
-                msg.yellow()
-            )),
-            Self::HostedZoneTooMany(msg) => f.write_str(&format!(
-                "{} Too many hosted zones found in account: {}",
-                "".yellow(),
-                msg.yellow()
-            )),
+            Severity::Critical => f.write_str(&format!("{} {}", "Ⓔ -".red(), self.message.red())),
         }
     }
 }

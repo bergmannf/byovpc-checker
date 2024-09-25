@@ -15,11 +15,18 @@ pub struct HostedZoneChecks {
 impl HostedZoneChecks {
     pub fn verify_number_of_hosted_zones(&self) -> VerificationResult {
         match self.hosted_zones.len() {
-            0 | 1 => VerificationResult::HostedZoneTooFew(self.hosted_zones.len().to_string()),
-            2 => {
-                VerificationResult::Success("Expected number of hosted zones found: 2".to_string())
-            }
-            _ => VerificationResult::HostedZoneTooMany(self.hosted_zones.len().to_string()),
+            0 | 1 => VerificationResult {
+                message: format!("Too few hosted zones found: {}", self.hosted_zones.len()),
+                severity: crate::types::Severity::Critical,
+            },
+            2 => VerificationResult {
+                message: "Expected number of hosted zones found: 2".to_string(),
+                severity: crate::types::Severity::Ok,
+            },
+            _ => VerificationResult {
+                message: format!("Too many hosted zones found: {}", self.hosted_zones.len()),
+                severity: crate::types::Severity::Critical,
+            },
         }
     }
 
@@ -51,16 +58,17 @@ impl HostedZoneChecks {
             .collect();
         for lb in load_balancer_names {
             if !resource_values.iter().any(|r| r.contains(&lb)) {
-                results.push(VerificationResult::LoadBalancerUnused(format!(
-                    "LoadBalancer '{}' is not being used in any hosted zone",
-                    lb
-                )))
+                results.push(VerificationResult {
+                    message: format!("LoadBalancer '{}' is not being used in any hosted zone", lb),
+                    severity: crate::types::Severity::Warning,
+                })
             }
         }
         if results.is_empty() {
-            results.push(VerificationResult::Success(
-                "All LoadBalancers are used in hosted zones.".to_string(),
-            ))
+            results.push(VerificationResult {
+                message: "All LoadBalancers are used in hosted zones.".to_string(),
+                severity: crate::types::Severity::Ok,
+            })
         }
         results
     }
