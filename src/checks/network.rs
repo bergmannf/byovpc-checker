@@ -307,6 +307,45 @@ impl<'a> ClusterNetwork<'a> {
         }
         verification_results
     }
+
+    pub fn verify_loadbalancer_eni_subnets(&self) -> Vec<VerificationResult> {
+        if self.load_balancer_enis.is_empty() {
+            return vec![VerificationResult {
+                message: "No ENIs found".to_string(),
+                severity: crate::types::Severity::Critical,
+            }];
+        }
+        let mut verification_results = vec![];
+        let configured_subnets = self.configured_subnets();
+        let configured_subnet_ids: HashSet<&str> = configured_subnets
+            .iter()
+            .map(|s| s.subnet_id().unwrap())
+            .collect();
+        for eni in self.load_balancer_enis.iter() {
+            if let Some(sid) = &eni.subnet_id {
+                if !configured_subnet_ids.iter().any(|csid| csid == sid) {
+                    verification_results.push(VerificationResult {
+                        message: format!(
+                            "LoadBalancer ENI {} is using a non-cluster subnet: {}",
+                            eni.network_interface_id.as_ref().unwrap(),
+                            sid
+                        ),
+                        severity: crate::types::Severity::Warning,
+                    });
+                } else {
+                    verification_results.push(VerificationResult {
+                        message: format!(
+                            "LoadBalancer ENI {} is using cluster subnet: {}",
+                            eni.network_interface_id.as_ref().unwrap(),
+                            sid
+                        ),
+                        severity: crate::types::Severity::Ok,
+                    });
+                }
+            }
+        }
+        verification_results
+    }
 }
 
 impl<'a> Verifier for ClusterNetwork<'a> {
@@ -314,8 +353,10 @@ impl<'a> Verifier for ClusterNetwork<'a> {
         let number_result = self.verify_number_of_subnets();
         let lb_result = self.verify_loadbalancer_subnets();
         let mut tag_results = self.verify_subnet_tags();
+        let eni_results = self.verify_loadbalancer_eni_subnets();
         tag_results.push(number_result);
         tag_results.extend(lb_result);
+        tag_results.extend(eni_results);
         tag_results
     }
 }

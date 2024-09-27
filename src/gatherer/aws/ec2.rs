@@ -306,25 +306,30 @@ impl<'a> Gatherer for NetworkInterfaceGatherer<'a> {
                     .load_balancer_name()
                     .as_ref()
                     .map_or("".to_string(), |n| format!("ELB {}", n)),
-                &AWSLoadBalancer::ModernLoadBalancer(lb) => lb
-                    .load_balancer_name()
-                    .as_ref()
-                    .map_or("".to_string(), |n| format!("ELB {}", n)),
+                &AWSLoadBalancer::ModernLoadBalancer(lb) => {
+                    lb.load_balancer_arn().as_ref().map_or("".to_string(), |n| {
+                        let identifier_parts: Vec<&str> = n.split_terminator("/").collect();
+                        let identifier = identifier_parts[identifier_parts.len() - 3..].join("/");
+                        format!("ELB {}", identifier)
+                    })
+                }
             })
             .collect();
+        let f = Filter::builder()
+            .name("description")
+            .set_values(Some(descriptions))
+            .build();
         let result = self
             .client
             .describe_network_interfaces()
-            .filters(
-                Filter::builder()
-                    .name("description")
-                    .values(descriptions.join(","))
-                    .build(),
-            )
+            .filters(f)
             .send()
             .await;
         match result {
-            Ok(success) => network_interfaces = success.network_interfaces,
+            Ok(success) => {
+                debug!("Found ENIs: {:?}", success);
+                network_interfaces = success.network_interfaces
+            }
             Err(err) => return Err(Box::new(err)),
         }
         Ok(network_interfaces.unwrap())
