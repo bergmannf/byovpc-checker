@@ -31,8 +31,6 @@ pub struct ClusterNetwork<'a> {
     load_balancers: Vec<AWSLoadBalancer>,
     #[builder(default = "vec![]")]
     load_balancer_enis: Vec<aws_sdk_ec2::types::NetworkInterface>,
-    #[builder(default = "vec![]")]
-    hosted_zones: Vec<HostedZoneWithRecords>,
 }
 
 impl<'a> ClusterNetworkBuilder<'a> {
@@ -452,7 +450,7 @@ mod tests {
         assert_eq!(
             result,
             VerificationResult {
-                message: "All AZs have the expected number of subnets".to_string(),
+                message: "AZs have the expected number of subnets".to_string(),
                 severity: crate::types::Severity::Ok,
             }
         )

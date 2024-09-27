@@ -8,11 +8,10 @@ mod gatherer;
 mod types;
 
 use aws_sdk_ec2::Error;
-use checks::{
-    dns::HostedZoneChecksBuilder,
-    network::{ClusterNetwork, ClusterNetworkBuilder},
-};
+use checks::{dns::HostedZoneChecksBuilder, network::ClusterNetworkBuilder};
 use clap::Parser;
+use colored::Colorize;
+use gatherer::aws::AWSClusterData;
 use std::process::exit;
 use types::MinimalClusterInfo;
 
@@ -28,6 +27,7 @@ enum OutputFormat {
 enum Check {
     All,
     Network,
+    HostedZone,
 }
 
 #[derive(Parser, Debug, Clone)]
@@ -45,6 +45,59 @@ struct Options {
     format: OutputFormat,
     #[arg(long, value_enum, default_values_t = vec![Check::All])]
     checks: Vec<Check>,
+}
+
+fn setup_checks(
+    options: Options,
+    cluster_info: &MinimalClusterInfo,
+    aws_data: AWSClusterData,
+) -> Vec<Box<dyn Verifier + '_>> {
+    let mut checks: Vec<Box<dyn Verifier>> = vec![];
+    for c in options.checks {
+        match c {
+            Check::All => {
+                let mut cnb = ClusterNetworkBuilder::default();
+                let cn = cnb
+                    .cluster_info(&cluster_info)
+                    .all_subnets(aws_data.subnets.clone())
+                    .routetables(aws_data.routetables.clone())
+                    .load_balancers(aws_data.load_balancers.clone())
+                    .load_balancer_enis(aws_data.load_balancer_enis.clone())
+                    .build()
+                    .unwrap();
+                checks.push(Box::new(cn));
+                let mut hzb = HostedZoneChecksBuilder::default();
+                let hz = hzb
+                    .hosted_zones(aws_data.hosted_zones.clone())
+                    .load_balancers(aws_data.load_balancers.clone())
+                    .build()
+                    .unwrap();
+                checks.push(Box::new(hz));
+            }
+            Check::Network => {
+                let mut cnb = ClusterNetworkBuilder::default();
+                let cn = cnb
+                    .cluster_info(&cluster_info)
+                    .all_subnets(aws_data.subnets.clone())
+                    .routetables(aws_data.routetables.clone())
+                    .load_balancers(aws_data.load_balancers.clone())
+                    .load_balancer_enis(aws_data.load_balancer_enis.clone())
+                    .build()
+                    .unwrap();
+                checks.push(Box::new(cn));
+            }
+            Check::HostedZone => {
+                let mut hzb = HostedZoneChecksBuilder::default();
+                let hz = hzb
+                    .hosted_zones(aws_data.hosted_zones.clone())
+                    .load_balancers(aws_data.load_balancers.clone())
+                    .build()
+                    .unwrap();
+                checks.push(Box::new(hz));
+            }
+        }
+    }
+    checks
 }
 
 #[tokio::main]
@@ -69,32 +122,16 @@ async fn main() -> Result<(), Error> {
 
     let aws_data = crate::gatherer::aws::gather(&cluster_info).await;
 
-    let mut cnb = ClusterNetworkBuilder::default();
-    let cn = cnb
-        .cluster_info(&cluster_info)
-        .all_subnets(aws_data.subnets)
-        .routetables(aws_data.routetables)
-        .load_balancers(aws_data.load_balancers.clone())
-        .load_balancer_enis(aws_data.load_balancer_enis)
-        .hosted_zones(aws_data.hosted_zones.clone())
-        .build()
-        .unwrap();
-    let mut hzb = HostedZoneChecksBuilder::default();
-    let hz = hzb
-        .hosted_zones(aws_data.hosted_zones.clone())
-        .load_balancers(aws_data.load_balancers.clone())
-        .build()
-        .unwrap();
     match options.format {
         OutputFormat::Debug => {
-            println!("{}", &format!("{:#?}", cn))
+            println!("{}", &format!("{:#?}", aws_data))
         }
         OutputFormat::Checks => {
-            for res in cn.verify() {
-                println!("{}", res);
-            }
-            for res in hz.verify() {
-                println!("{}", res);
+            let checks = setup_checks(options, &cluster_info, aws_data);
+            for check in checks {
+                for res in check.verify() {
+                    println!("{}", res);
+                }
             }
         }
     }

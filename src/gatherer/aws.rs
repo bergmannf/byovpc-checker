@@ -28,6 +28,7 @@ use shared_types::HostedZoneWithRecords;
 use url::Url;
 
 /// Struct that holds all data available in AWS once we gathered it.
+#[derive(Clone, Debug)]
 pub struct AWSClusterData {
     pub subnets: Vec<aws_sdk_ec2::types::Subnet>,
     pub routetables: Vec<aws_sdk_ec2::types::RouteTable>,
