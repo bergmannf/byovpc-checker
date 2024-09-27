@@ -65,6 +65,9 @@ impl<'a> ClusterNetworkBuilder<'a> {
 
 impl<'a> ClusterNetwork<'a> {
     fn configured_subnets(&self) -> Vec<Subnet> {
+        if self.cluster_info.subnets.is_empty() {
+            return self.all_subnets.clone();
+        }
         let mut configured_subnets = vec![];
         for subnet in self.all_subnets.iter() {
             if self
@@ -149,14 +152,14 @@ impl<'a> ClusterNetwork<'a> {
         } else {
             let msg: Vec<String> = problematic_azs
                 .iter()
-                .map(|a| format!("AZ {} (VPC: {})", a.0 .0, a.0 .1))
+                .map(|a| format!("{} (AZ: {})", a.0 .0, a.0 .1))
                 .collect();
             VerificationResult {
                 message: format!(
-                    "There are too many subnets in the follow AZs: {}",
+                    "There are too many subnets in the following VPC: {}",
                     msg.join(", ")
                 ),
-                severity: crate::types::Severity::Ok,
+                severity: crate::types::Severity::Warning,
             }
         }
     }
@@ -210,7 +213,7 @@ impl<'a> ClusterNetwork<'a> {
                     message: format!(
                         "Subnet {} is missing cluster tag: {}",
                         subnet_id.clone(),
-                        CLUSTER_TAG
+                        format!("{}{}", CLUSTER_TAG, self.cluster_info.cluster_infra_name)
                     ),
                     severity: crate::types::Severity::Info,
                 });
@@ -242,8 +245,11 @@ impl<'a> ClusterNetwork<'a> {
                 && !missing_public_elb_tag
                 && !missing_private_elb_tag
             {
-                verification_results.push(VerificationResult{
-                    message: format!("Subnet {} is correctly setup: tags are present and correct number of subnets per AZ found.", subnet_id),
+                verification_results.push(VerificationResult {
+                    message: format!(
+                        "Subnet {} is correctly setup: expected tags are present.",
+                        subnet_id
+                    ),
                     severity: crate::types::Severity::Ok,
                 })
             }
@@ -268,20 +274,13 @@ impl<'a> ClusterNetwork<'a> {
     /// This can be incorrect, if subnet tagging was done incorrectly:
     /// See https://access.redhat.com/documentation/en-us/red_hat_openshift_service_on_aws/4/html-single/networking/index#aws-installing-an-aws-load-balancer-operator_aws-load-balancer-operator
     pub fn verify_loadbalancer_subnets(&self) -> Vec<VerificationResult> {
-        // If there are no configured subnets, the cluster is not BYOVPC, so
-        // not checking if LBs are using those subnets.
-        if self.cluster_info.subnets.is_empty() {
-            return vec![VerificationResult {
-                message: "The cluster is not BYOVPC - will not check loadbalancers".to_string(),
-                severity: crate::types::Severity::Ok,
-            }];
-        }
         let mut verification_results = vec![];
         let configured_subnets = self.configured_subnets();
         let configured_subnet_ids: HashSet<&str> = configured_subnets
             .iter()
             .map(|s| s.subnet_id().unwrap())
             .collect();
+        debug!("Configured subnets {:?}", configured_subnet_ids);
         for alb in self.load_balancers.iter() {
             // FIXME: This check should (partially) work for CLBs as well
             let AWSLoadBalancer::ModernLoadBalancer(lb) = alb else {
@@ -302,7 +301,7 @@ impl<'a> ClusterNetwork<'a> {
         }
         if verification_results.len() == 0 {
             verification_results.push(VerificationResult {
-                message: "LoadBalancer subnet associations seem correct".to_string(),
+                message: "LoadBalancer subnet associations are correct".to_string(),
                 severity: crate::types::Severity::Ok,
             });
         }
@@ -447,9 +446,9 @@ mod tests {
         assert_eq!(
             result,
             VerificationResult {
-                message: "There are too many subnets in the follow AZs: AZ vpc-1 (VPC: us-east-1a)"
+                message: "There are too many subnets in the following VPC: vpc-1 (AZ: us-east-1a)"
                     .to_string(),
-                severity: crate::types::Severity::Ok,
+                severity: crate::types::Severity::Warning,
             }
         )
     }
@@ -509,7 +508,10 @@ mod tests {
         let results = cn.verify_subnet_tags();
         assert_eq!(
             results[0],
-            VerificationResult { message: "Subnet 1 is correctly setup: tags are present and correct number of subnets per AZ found.".to_string(), severity: crate::types::Severity::Ok }
+            VerificationResult {
+                message: "Subnet 1 is correctly setup: expected tags are present.".to_string(),
+                severity: crate::types::Severity::Ok
+            }
         )
     }
 
