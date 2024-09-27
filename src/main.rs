@@ -25,7 +25,6 @@ enum OutputFormat {
 
 #[derive(Clone, Debug, clap::ValueEnum)]
 enum Check {
-    All,
     Network,
     HostedZone,
 }
@@ -43,7 +42,7 @@ struct Options {
     verbose: clap_verbosity_flag::Verbosity,
     #[arg(short, long, value_enum, default_value_t = OutputFormat::Checks)]
     format: OutputFormat,
-    #[arg(long, value_enum, default_values_t = vec![Check::All])]
+    #[arg(long, value_enum, default_values_t = vec![Check::Network, Check::HostedZone])]
     checks: Vec<Check>,
 }
 
@@ -55,25 +54,6 @@ fn setup_checks(
     let mut checks: Vec<Box<dyn Verifier>> = vec![];
     for c in options.checks {
         match c {
-            Check::All => {
-                let mut cnb = ClusterNetworkBuilder::default();
-                let cn = cnb
-                    .cluster_info(&cluster_info)
-                    .all_subnets(aws_data.subnets.clone())
-                    .routetables(aws_data.routetables.clone())
-                    .load_balancers(aws_data.load_balancers.clone())
-                    .load_balancer_enis(aws_data.load_balancer_enis.clone())
-                    .build()
-                    .unwrap();
-                checks.push(Box::new(cn));
-                let mut hzb = HostedZoneChecksBuilder::default();
-                let hz = hzb
-                    .hosted_zones(aws_data.hosted_zones.clone())
-                    .load_balancers(aws_data.load_balancers.clone())
-                    .build()
-                    .unwrap();
-                checks.push(Box::new(hz));
-            }
             Check::Network => {
                 let mut cnb = ClusterNetworkBuilder::default();
                 let cn = cnb
