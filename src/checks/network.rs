@@ -144,7 +144,7 @@ impl<'a> ClusterNetwork<'a> {
         }
         if problematic_azs.len() == 0 {
             VerificationResult {
-                message: "All AZs have the expected number of subnets".to_string(),
+                message: "AZs have the expected number of subnets".to_string(),
                 severity: crate::types::Severity::Ok,
             }
         } else {
