@@ -199,14 +199,14 @@ impl<'a> InstanceGatherer<'a> {
 
 #[async_trait]
 impl<'a> Gatherer for InstanceGatherer<'a> {
-    type Resource = Instance;
+    type Resource = AWSInstance;
 
     async fn gather(&self) -> Result<Vec<Self::Resource>, Box<dyn Error>> {
         let cluster_tag = format!(
             "tag:{}{}",
             CLUSTER_TAG_PREFIX, self.cluster_info.cluster_infra_name
         );
-        let openshift_instances;
+        let mut openshift_instances: Vec<AWSInstance> = vec![];
         match self
             .client
             .describe_instances()
@@ -215,18 +215,15 @@ impl<'a> Gatherer for InstanceGatherer<'a> {
             .await
         {
             Ok(instance_output) => {
-                openshift_instances = instance_output
+                let aws_instances = instance_output
                     .reservations
                     .expect("Expected reservations to bet set")
                     .into_iter()
                     .map(|r| r.instances.unwrap())
                     .flatten()
                     .collect();
-                let security_groups = self
-                    .get_security_groups(&openshift_instances)
-                    .await
-                    .unwrap();
-                for instance in openshift_instances.iter() {
+                let security_groups = self.get_security_groups(&aws_instances).await.unwrap();
+                for instance in aws_instances.iter() {
                     let mut awsi = AWSInstance {
                         instance: instance.clone(),
                         security_groups: vec![],
@@ -241,6 +238,7 @@ impl<'a> Gatherer for InstanceGatherer<'a> {
                             awsi.security_groups.push(sg.clone());
                         }
                     }
+                    openshift_instances.push(awsi);
                 }
             }
             Err(err) => return Err(Box::new(err)),

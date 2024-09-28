@@ -23,6 +23,7 @@ use hyper_proxy::{Intercept, Proxy, ProxyConnector};
 use log::debug;
 use log::error;
 use log::info;
+use shared_types::AWSInstance;
 use shared_types::AWSLoadBalancer;
 use shared_types::HostedZoneWithRecords;
 use url::Url;
@@ -34,7 +35,7 @@ pub struct AWSClusterData {
     pub routetables: Vec<aws_sdk_ec2::types::RouteTable>,
     pub load_balancers: Vec<AWSLoadBalancer>,
     pub load_balancer_enis: Vec<aws_sdk_ec2::types::NetworkInterface>,
-    pub instances: Vec<aws_sdk_ec2::types::Instance>,
+    pub instances: Vec<AWSInstance>,
     pub hosted_zones: Vec<HostedZoneWithRecords>,
 }
 

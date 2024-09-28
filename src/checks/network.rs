@@ -348,14 +348,12 @@ impl<'a> ClusterNetwork<'a> {
 
 impl<'a> Verifier for ClusterNetwork<'a> {
     fn verify(&self) -> Vec<VerificationResult> {
-        let number_result = self.verify_number_of_subnets();
-        let lb_result = self.verify_loadbalancer_subnets();
-        let mut tag_results = self.verify_subnet_tags();
-        let eni_results = self.verify_loadbalancer_eni_subnets();
-        tag_results.push(number_result);
-        tag_results.extend(lb_result);
-        tag_results.extend(eni_results);
-        tag_results
+        let mut results = vec![];
+        results.push(self.verify_number_of_subnets());
+        results.extend(self.verify_loadbalancer_subnets());
+        results.extend(self.verify_subnet_tags());
+        results.extend(self.verify_loadbalancer_eni_subnets());
+        results
     }
 }
 

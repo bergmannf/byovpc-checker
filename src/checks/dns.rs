@@ -109,10 +109,10 @@ impl HostedZoneChecks {
 
 impl Verifier for HostedZoneChecks {
     fn verify(&self) -> Vec<crate::types::VerificationResult> {
-        let mut result = self.verify_load_balancers_are_used();
-        result.push(self.verify_number_of_hosted_zones());
-        let mut r2 = self.verify_only_known_load_balancers_are_used();
-        result.append(&mut r2);
-        result
+        let mut results = vec![];
+        results.push(self.verify_number_of_hosted_zones());
+        results.extend(self.verify_load_balancers_are_used());
+        results.extend(self.verify_only_known_load_balancers_are_used());
+        results
     }
 }
