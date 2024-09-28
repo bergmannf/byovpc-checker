@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use aws_sdk_ec2::types::{Filter, NetworkInterface};
-use aws_sdk_ec2::Client;
 use aws_sdk_elasticloadbalancingv2::operation::describe_load_balancers::DescribeLoadBalancersOutput;
 use aws_sdk_elasticloadbalancingv2::types::LoadBalancer;
 use aws_sdk_elasticloadbalancingv2::Client as ELBv2Client;
@@ -81,41 +79,4 @@ impl<'a> Gatherer for LoadBalancerGatherer<'a> {
         }
         Ok(cluster_lbs)
     }
-}
-
-pub async fn get_load_balancer_enis(
-    ec2_client: &Client,
-    lbs: &Vec<AWSLoadBalancer>,
-) -> Result<Vec<NetworkInterface>, aws_sdk_ec2::Error> {
-    debug!("Retrieving ENIs for LoadBalancers");
-    let network_interfaces;
-    // aws ec2 describe-network-interfaces --filters Name=description,Values="ELB $MC_LB_NAME" --query 'NetworkInterfaces[].PrivateIpAddresses[].PrivateIpAddress' --no-cli-pager --output yaml >> "$TMP_FILE"
-    let descriptions: Vec<String> = lbs
-        .iter()
-        .map(|lb| match &lb {
-            &AWSLoadBalancer::ClassicLoadBalancer(lb) => lb
-                .load_balancer_name()
-                .as_ref()
-                .map_or("".to_string(), |n| format!("ELB {}", n)),
-            &AWSLoadBalancer::ModernLoadBalancer(lb) => lb
-                .load_balancer_name()
-                .as_ref()
-                .map_or("".to_string(), |n| format!("ELB {}", n)),
-        })
-        .collect();
-    let result = ec2_client
-        .describe_network_interfaces()
-        .filters(
-            Filter::builder()
-                .name("description")
-                .values(descriptions.join(","))
-                .build(),
-        )
-        .send()
-        .await;
-    match result {
-        Ok(success) => network_interfaces = success.network_interfaces,
-        Err(err) => return Err(aws_sdk_ec2::Error::from(err)),
-    }
-    Ok(network_interfaces.unwrap())
 }
