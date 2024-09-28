@@ -17,11 +17,11 @@ pub const CLUSTER_TAG_PREFIX: &str = "kubernetes.io/cluster/";
 // Allows the method to dispatch using match where needed.
 #[derive(Clone, Debug)]
 pub enum AWSLoadBalancer {
-    ClassicLoadBalancer(LoadBalancerDescription),
-    ModernLoadBalancer(LoadBalancer),
+    ClassicLoadBalancer((LoadBalancerDescription, Vec<Tag>)),
+    ModernLoadBalancer((LoadBalancer, Vec<Tag>)),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Tag {
     /// <p>The key of the tag.</p>
     pub key: Option<String>,

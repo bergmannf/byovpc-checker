@@ -20,7 +20,7 @@ pub struct LoadBalancerGatherer<'a> {
 
 #[async_trait]
 impl<'a> Gatherer for LoadBalancerGatherer<'a> {
-    type Resource = LoadBalancer;
+    type Resource = AWSLoadBalancer;
 
     async fn gather(&self) -> Result<Vec<Self::Resource>, Box<dyn Error>> {
         debug!("Retrieving LoadBalancers");
@@ -65,12 +65,23 @@ impl<'a> Gatherer for LoadBalancerGatherer<'a> {
             };
             if let Some(tag_descriptions) = tags.tag_descriptions {
                 for td in tag_descriptions {
-                    if let Some(tag) = td.tags {
+                    if let Some(ref tag) = td.tags {
                         for t in tag {
                             debug!("Checking tag: {:?}", t);
-                            if collector.match_tag(t.into()) {
+                            if collector.match_tag(t.clone().into()) {
                                 debug!("Tag matched");
-                                cluster_lbs.push(lb_val.clone())
+                                let tags: Vec<crate::gatherer::aws::shared_types::Tag> = match td
+                                    .tags
+                                {
+                                    None => {
+                                        vec![]
+                                    }
+                                    Some(ref ts) => ts.iter().map(|t| t.clone().into()).collect(),
+                                };
+                                cluster_lbs.push(AWSLoadBalancer::ModernLoadBalancer((
+                                    lb_val.clone(),
+                                    tags,
+                                )))
                             }
                         }
                     }

@@ -1,18 +1,19 @@
 use std::collections::HashMap;
 
-use aws_sdk_elasticloadbalancing::types::LoadBalancerDescription;
 use aws_sdk_elasticloadbalancing::Client as ELBClient;
 use log::debug;
 
 use super::shared_types::Collector;
 use super::shared_types::DefaultCollector;
 use super::shared_types::HypershiftCollector;
+use crate::gatherer::aws::shared_types::AWSLoadBalancer;
 use crate::types::MinimalClusterInfo;
 
 pub async fn get_classic_load_balancers(
     elb_client: &ELBClient,
     cluster_info: &MinimalClusterInfo,
-) -> Result<Vec<LoadBalancerDescription>, aws_sdk_elasticloadbalancing::Error> {
+) -> Result<Vec<AWSLoadBalancer>, aws_sdk_elasticloadbalancing::Error> {
+    let mut cluster_lbs = vec![];
     debug!("Retrieving classic LoadBalancers");
     let collector: Box<dyn Collector + Send> = match cluster_info.cluster_type {
         crate::types::ClusterType::Hypershift => {
@@ -51,20 +52,27 @@ pub async fn get_classic_load_balancers(
             Ok(success) => tags = success,
             Err(err) => return Err(aws_sdk_elasticloadbalancing::Error::from(err)),
         };
-        let mut cluster_lbs = vec![];
         if let Some(tag_descriptions) = tags.tag_descriptions {
             for td in tag_descriptions {
-                if let Some(tag) = td.tags {
+                if let Some(ref tag) = td.tags {
                     for t in tag {
                         debug!("Checking tag: {:?}", t);
-                        if collector.match_tag(t.into()) {
+                        if collector.match_tag(t.clone().into()) {
                             debug!("Tag matched");
-                            cluster_lbs.push(lb_val.clone())
+
+                            let tags: Vec<crate::gatherer::aws::shared_types::Tag> = match td.tags {
+                                None => {
+                                    vec![]
+                                }
+                                Some(ref ts) => ts.iter().map(|t| t.clone().into()).collect(),
+                            };
+                            cluster_lbs
+                                .push(AWSLoadBalancer::ClassicLoadBalancer((lb_val.clone(), tags)))
                         }
                     }
                 }
             }
         }
     }
-    return Ok(vec![]);
+    return Ok(cluster_lbs);
 }

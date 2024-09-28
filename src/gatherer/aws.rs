@@ -120,25 +120,15 @@ pub async fn gather(cluster_info: &MinimalClusterInfo) -> AWSClusterData {
                     .expect("could not retrieve classic load balancers");
             let ec2_client = ec2_client.clone();
             let lbs = lbs.clone();
-            let mut mlbs: Vec<crate::gatherer::aws::shared_types::AWSLoadBalancer> = lbs
-                .clone()
-                .into_iter()
-                .map(|l| crate::gatherer::aws::shared_types::AWSLoadBalancer::ModernLoadBalancer(l))
-                .collect();
-            let mut clbs: Vec<crate::gatherer::aws::shared_types::AWSLoadBalancer> = classic_lbs
-                .clone()
-                .into_iter()
-                .map(|l| {
-                    crate::gatherer::aws::shared_types::AWSLoadBalancer::ClassicLoadBalancer(l)
-                })
-                .collect();
-            clbs.append(&mut mlbs);
+            let mut all_lbs = vec![];
+            all_lbs.extend(lbs);
+            all_lbs.extend(classic_lbs);
             let enig = crate::gatherer::aws::ec2::NetworkInterfaceGatherer {
                 client: &ec2_client,
-                loadbalancers: &clbs,
+                loadbalancers: &all_lbs,
             };
             let eni_lbs = enig.gather().await.expect("could not retrieve ENIs");
-            (clbs, eni_lbs)
+            (all_lbs, eni_lbs)
         }
     });
 

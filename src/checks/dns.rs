@@ -36,10 +36,10 @@ impl HostedZoneChecks {
         self.load_balancers
             .iter()
             .map(|l| match l {
-                AWSLoadBalancer::ClassicLoadBalancer(c) => {
+                AWSLoadBalancer::ClassicLoadBalancer((c, _)) => {
                     c.dns_name.clone().unwrap_or("".to_string())
                 }
-                AWSLoadBalancer::ModernLoadBalancer(m) => {
+                AWSLoadBalancer::ModernLoadBalancer((m, _)) => {
                     m.dns_name.clone().unwrap_or("".to_string())
                 }
             })

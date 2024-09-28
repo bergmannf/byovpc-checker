@@ -257,11 +257,11 @@ pub async fn get_load_balancer_enis(
     let descriptions: Vec<String> = lbs
         .iter()
         .map(|lb| match &lb {
-            &AWSLoadBalancer::ClassicLoadBalancer(lb) => lb
+            &AWSLoadBalancer::ClassicLoadBalancer((lb, _)) => lb
                 .load_balancer_name()
                 .as_ref()
                 .map_or("".to_string(), |n| format!("ELB {}", n)),
-            &AWSLoadBalancer::ModernLoadBalancer(lb) => lb
+            &AWSLoadBalancer::ModernLoadBalancer((lb, _)) => lb
                 .load_balancer_name()
                 .as_ref()
                 .map_or("".to_string(), |n| format!("ELB {}", n)),
@@ -300,11 +300,11 @@ impl<'a> Gatherer for NetworkInterfaceGatherer<'a> {
             .loadbalancers
             .iter()
             .map(|lb| match &lb {
-                &AWSLoadBalancer::ClassicLoadBalancer(lb) => lb
+                &AWSLoadBalancer::ClassicLoadBalancer((lb, _)) => lb
                     .load_balancer_name()
                     .as_ref()
                     .map_or("".to_string(), |n| format!("ELB {}", n)),
-                &AWSLoadBalancer::ModernLoadBalancer(lb) => {
+                &AWSLoadBalancer::ModernLoadBalancer((lb, _)) => {
                     lb.load_balancer_arn().as_ref().map_or("".to_string(), |n| {
                         let identifier_parts: Vec<&str> = n.split_terminator("/").collect();
                         let identifier = identifier_parts[identifier_parts.len() - 3..].join("/");

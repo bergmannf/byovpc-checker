@@ -268,6 +268,16 @@ impl<'a> ClusterNetwork<'a> {
         vec![]
     }
 
+    pub fn verify_number_of_load_balancers_for_services(&self) -> Vec<VerificationResult> {
+        for lb in self.load_balancers.iter() {
+            match lb {
+                AWSLoadBalancer::ClassicLoadBalancer((c, tags)) => {}
+                AWSLoadBalancer::ModernLoadBalancer((m, tags)) => {}
+            }
+        }
+        vec![]
+    }
+
     /// Verifies that a LB is using the subnets that are actually configured for the cluster.
     /// This can be incorrect, if subnet tagging was done incorrectly:
     /// See https://access.redhat.com/documentation/en-us/red_hat_openshift_service_on_aws/4/html-single/networking/index#aws-installing-an-aws-load-balancer-operator_aws-load-balancer-operator
@@ -281,7 +291,7 @@ impl<'a> ClusterNetwork<'a> {
         debug!("Configured subnets {:?}", configured_subnet_ids);
         for alb in self.load_balancers.iter() {
             // FIXME: This check should (partially) work for CLBs as well
-            let AWSLoadBalancer::ModernLoadBalancer(lb) = alb else {
+            let AWSLoadBalancer::ModernLoadBalancer((lb, _)) = alb else {
                 continue;
             };
             for az in lb.availability_zones() {
