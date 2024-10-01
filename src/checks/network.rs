@@ -5,8 +5,8 @@
 //! - The subnets in the VPC have the expected tags.
 
 use crate::{
-    gatherer::aws::shared_types::{AWSLoadBalancer, HostedZoneWithRecords},
-    types::{MinimalClusterInfo, VerificationResult, Verifier},
+    gatherer::aws::shared_types::{AWSLoadBalancer, HostedZoneWithRecords, DEFAULT_ROUTER_TAG},
+    types::{MinimalClusterInfo, Severity, VerificationResult, Verifier},
 };
 use aws_sdk_ec2::types::Subnet;
 use derive_builder::Builder;
@@ -269,13 +269,48 @@ impl<'a> ClusterNetwork<'a> {
     }
 
     pub fn verify_number_of_load_balancers_for_services(&self) -> Vec<VerificationResult> {
+        let mut results = vec![];
+        let mut service_lbs = HashMap::new();
         for lb in self.load_balancers.iter() {
             match lb {
-                AWSLoadBalancer::ClassicLoadBalancer((c, tags)) => {}
-                AWSLoadBalancer::ModernLoadBalancer((m, tags)) => {}
+                AWSLoadBalancer::ClassicLoadBalancer((c, tags)) => {
+                    for t in tags {
+                        let key = t.key.as_ref().unwrap();
+                        if key == DEFAULT_ROUTER_TAG {
+                            let value_ref = service_lbs.entry(key).or_insert(vec![]);
+                            value_ref.push(lb);
+                            let i = value_ref.to_vec();
+                            service_lbs.insert(key, i);
+                        };
+                    }
+                }
+                AWSLoadBalancer::ModernLoadBalancer((m, tags)) => {
+                    for t in tags {
+                        let key = t.key.as_ref().unwrap();
+                        if key == DEFAULT_ROUTER_TAG {
+                            let value_ref = service_lbs.entry(key).or_insert(vec![]);
+                            value_ref.push(lb);
+                            let i = value_ref.to_vec();
+                            service_lbs.insert(key, i);
+                        };
+                    }
+                }
             }
         }
-        vec![]
+        for (slb_key, slb_value) in service_lbs {
+            if slb_value.len() > 1 {
+                results.push(VerificationResult {
+                    message: format!(
+                        "Service {} has multiple Load Balancers ({}) associated",
+                        slb_key,
+                        slb_value.len()
+                    ),
+                    severity: Severity::Warning,
+                })
+            }
+        }
+        // TODO: Does this need an all-good result?
+        results
     }
 
     /// Verifies that a LB is using the subnets that are actually configured for the cluster.
@@ -363,6 +398,7 @@ impl<'a> Verifier for ClusterNetwork<'a> {
         results.extend(self.verify_loadbalancer_subnets());
         results.extend(self.verify_subnet_tags());
         results.extend(self.verify_loadbalancer_eni_subnets());
+        results.extend(self.verify_number_of_load_balancers_for_services());
         results
     }
 }
