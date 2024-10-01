@@ -10,16 +10,16 @@ mod types;
 use aws_sdk_ec2::Error;
 use checks::{dns::HostedZoneChecksBuilder, network::ClusterNetworkBuilder};
 use clap::Parser;
-use colored::Colorize;
 use gatherer::aws::AWSClusterData;
 use std::process::exit;
-use types::MinimalClusterInfo;
+use types::{MinimalClusterInfo, Severity};
 
 use crate::types::Verifier;
 
 #[derive(Clone, Debug, clap::ValueEnum)]
 enum OutputFormat {
     Checks,
+    Failures,
     Debug,
 }
 
@@ -111,6 +111,16 @@ async fn main() -> Result<(), Error> {
             for check in checks {
                 for res in check.verify() {
                     println!("{}", res);
+                }
+            }
+        }
+        OutputFormat::Failures => {
+            let checks = setup_checks(options, &cluster_info, aws_data);
+            for check in checks {
+                for res in check.verify() {
+                    if res.severity != Severity::Ok {
+                        println!("{}", res);
+                    }
                 }
             }
         }
