@@ -5,10 +5,10 @@
 //! - The subnets in the VPC have the expected tags.
 
 use crate::{
-    gatherer::aws::shared_types::{AWSLoadBalancer, HostedZoneWithRecords, DEFAULT_ROUTER_TAG},
+    gatherer::aws::shared_types::{AWSLoadBalancer, DEFAULT_ROUTER_TAG, HostedZoneWithRecords},
     types::{MinimalClusterInfo, Severity, VerificationResult, Verifier},
 };
-use aws_sdk_ec2::types::Subnet;
+use aws_sdk_ec2::types::{Subnet, Tag};
 use derive_builder::Builder;
 use log::{debug, info};
 
@@ -150,7 +150,7 @@ impl<'a> ClusterNetwork<'a> {
         } else {
             let msg: Vec<String> = problematic_azs
                 .iter()
-                .map(|a| format!("{} (AZ: {})", a.0 .0, a.0 .1))
+                .map(|a| format!("{} (AZ: {})", a.0.0, a.0.1))
                 .collect();
             VerificationResult {
                 message: format!(
@@ -169,24 +169,46 @@ impl<'a> ClusterNetwork<'a> {
         info!("Checking tags per subnet");
         let mut verification_results = Vec::new();
         for subnet in self.all_subnets.iter() {
-            let mut missing_cluster_tag = true;
+            let mut cluster_tag_not_shared = false;
+            let mut missing_cluster_tag = false;
             let mut incorrect_cluster_tag = String::new();
             let mut missing_private_elb_tag = true;
             let mut missing_public_elb_tag = true;
+            let tag_name: &str = match self.cluster_info.cluster_type {
+                crate::types::ClusterType::Osd => &self.cluster_info.cluster_infra_name,
+                crate::types::ClusterType::Rosa => &self.cluster_info.cluster_infra_name,
+                crate::types::ClusterType::Hypershift => &self.cluster_info.cluster_id,
+            };
             let subnet_id = subnet.subnet_id().unwrap().to_string();
             let tags = subnet.tags();
             debug!("Checking subnet: {}", subnet_id);
-            for tag in tags {
-                if let (Some(key), Some(value)) = (&tag.key, &tag.value) {
-                    if key.contains(&CLUSTER_TAG) {
-                        missing_cluster_tag = false;
-                        if !(key.contains(&self.cluster_info.cluster_id)
-                            || key.contains(&self.cluster_info.cluster_infra_name))
-                            && value == "owned"
-                        {
-                            incorrect_cluster_tag = key.clone();
-                        }
+            let ownership_tags: Vec<&Tag> = tags
+                .iter()
+                .filter(|t| t.key().as_ref().unwrap().contains(&CLUSTER_TAG))
+                .collect();
+            match ownership_tags.len() {
+                0 => {
+                    missing_cluster_tag = true;
+                }
+                1 => {
+                    if !ownership_tags[0].key.as_ref().unwrap().contains(tag_name) {
+                        incorrect_cluster_tag = ownership_tags[0].key.as_ref().unwrap().clone();
                     }
+                }
+                _ => {
+                    let this_cluster_tag: Vec<&Tag> = ownership_tags
+                        .into_iter()
+                        .filter(|t| t.key().as_ref().unwrap().contains(tag_name))
+                        .collect();
+                    if this_cluster_tag.is_empty() {
+                        missing_cluster_tag = true;
+                    } else if this_cluster_tag[0].value().as_ref().unwrap() != &"shared" {
+                        cluster_tag_not_shared = true;
+                    }
+                }
+            };
+            for tag in tags {
+                if let (Some(key), Some(_value)) = (&tag.key, &tag.value) {
                     if !self.get_private_subnets().contains(&subnet_id) {
                         missing_private_elb_tag = false;
                     }
@@ -222,6 +244,15 @@ impl<'a> ClusterNetwork<'a> {
                         "Subnet {} is using incorrect cluster tag: {}",
                         subnet_id.clone(),
                         incorrect_cluster_tag
+                    ),
+                    severity: crate::types::Severity::Critical,
+                });
+            }
+            if cluster_tag_not_shared {
+                verification_results.push(VerificationResult {
+                    message: format!(
+                        "Subnet {} is using multiple cluster tags, but this cluster's tag is not set to shared",
+                        subnet_id.clone(),
                     ),
                     severity: crate::types::Severity::Critical,
                 });
