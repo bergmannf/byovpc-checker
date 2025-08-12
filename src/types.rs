@@ -67,13 +67,16 @@ impl MinimalClusterInfo {
 
     pub fn get_cluster_info(clusterid: &String) -> Self {
         let cluster_json = MinimalClusterInfo::get_cluster_json(clusterid);
+        let internal_id = cluster_json.get("id").unwrap().as_str().unwrap();
         let sxs = cluster_json
             .get("aws")
             .and_then(|v| v.get("subnet_ids"))
             .and_then(|v| v.as_array());
         let subnets: Vec<String> = if let Some(sx) = sxs {
             if sx.is_empty() {
-                warn!("No subnet ids configured - this will make some checks relying on this useless.");
+                warn!(
+                    "No subnet ids configured - this will make some checks relying on this useless."
+                );
                 vec![]
             } else {
                 sx.iter()
@@ -101,7 +104,7 @@ impl MinimalClusterInfo {
                 .unwrap(),
         };
         MinimalClusterInfo {
-            cluster_id: clusterid.to_string(),
+            cluster_id: internal_id.to_string(),
             cluster_infra_name: cluster_infra_name.to_string(),
             cluster_type,
             cloud_provider: cluster_json["cloud_provider"]["id"]
